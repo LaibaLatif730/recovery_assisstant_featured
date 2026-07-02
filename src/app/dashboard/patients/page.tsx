@@ -33,11 +33,12 @@ export default function PatientsPage() {
 
   const fetchPatients = async () => {
     try {
-      const res = await fetch(`/api/patients${search ? `?search=${search}` : ''}`)
+      const res = await fetch(`/api/patients${search ? `?search=${encodeURIComponent(search)}` : ''}`)
       const data = await res.json()
-      setPatients(data)
+      setPatients(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching patients:', error)
+      setPatients([])
     } finally {
       setLoading(false)
     }

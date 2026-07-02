@@ -31,7 +31,7 @@ export default function TreatmentsPage() {
     try {
       const res = await fetch('/api/treatments')
       const data = await res.json()
-      setTreatments(data)
+      setTreatments(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching treatments:', error)
     } finally {

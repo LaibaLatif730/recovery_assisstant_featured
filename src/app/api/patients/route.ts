@@ -22,7 +22,9 @@ export async function GET(req: Request) {
     const patients = await prisma.patient.findMany({
       where,
       include: {
-        treatments: { select: { id: true, type: true, treatmentDate: true } },
+        treatments: {
+          select: { id: true, type: true, treatmentDate: true },
+        },
         _count: { select: { treatments: true, checkIns: true, appointments: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -41,18 +43,29 @@ export async function POST(req: Request) {
     const body = await req.json()
     const validatedData = patientSchema.parse(body)
 
+    let medicalHistory = undefined
+    if (validatedData.medicalHistory) {
+      try {
+        medicalHistory = JSON.parse(validatedData.medicalHistory)
+      } catch {
+        medicalHistory = validatedData.medicalHistory
+      }
+    }
+
     const patient = await prisma.patient.create({
       data: {
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
         email: validatedData.email || undefined,
-        phone: validatedData.phone,
+        phone: validatedData.phone || undefined,
         dateOfBirth: validatedData.dateOfBirth ? new Date(validatedData.dateOfBirth) : undefined,
-        gender: validatedData.gender,
-        address: validatedData.address,
-        medicalHistory: validatedData.medicalHistory ? JSON.parse(validatedData.medicalHistory) : undefined,
-        allergies: validatedData.allergies,
-        clinicId: validatedData.clinicId,
+        gender: validatedData.gender || undefined,
+        address: validatedData.address || undefined,
+        medicalHistory,
+        allergies: validatedData.allergies || undefined,
+        medications: validatedData.medications || undefined,
+        emergencyContact: validatedData.emergencyContact || undefined,
+        clinicId: validatedData.clinicId || undefined,
         consentGiven: true,
         consentDate: new Date(),
       },

@@ -64,7 +64,7 @@ export default function NewPatientPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">{error}</div>
+              <div className="p-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-md">{error}</div>
             )}
 
             <div className="grid gap-4 md:grid-cols-2">

@@ -34,9 +34,10 @@ export default function CheckInsPage() {
       const url = filter === 'all' ? '/api/checkins' : `/api/checkins?status=${filter}`
       const res = await fetch(url)
       const data = await res.json()
-      setCheckIns(data)
+      setCheckIns(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching check-ins:', error)
+      setCheckIns([])
     } finally {
       setLoading(false)
     }
@@ -44,9 +45,10 @@ export default function CheckInsPage() {
 
   const getRiskBadgeVariant = (level: string) => {
     switch (level) {
-      case 'CRITICAL': return 'destructive'
-      case 'HIGH': return 'destructive'
-      case 'MEDIUM': return 'secondary'
+      case 'RED': return 'destructive'
+      case 'ORANGE': return 'destructive'
+      case 'YELLOW': return 'secondary'
+      case 'GREEN': return 'outline'
       default: return 'outline'
     }
   }
@@ -64,7 +66,7 @@ export default function CheckInsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Recovery Check-ins</h1>
+          <h1 className="text-2xl font-bold text-white">Recovery Check-ins</h1>
           <p className="text-muted-foreground">Monitor patient recovery progress</p>
         </div>
       </div>
@@ -114,7 +116,7 @@ export default function CheckInsPage() {
           ) : (
             <div className="space-y-4">
               {checkIns.map((checkIn) => (
-                <div key={checkIn.id} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                <div key={checkIn.id} className="p-4 border rounded-lg hover:bg-white/5 transition-colors">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
                       <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -145,16 +147,16 @@ export default function CheckInsPage() {
                   </div>
 
                   {checkIn.patientMessage && (
-                    <div className="mt-4 p-3 bg-gray-50 rounded-md">
-                      <p className="text-sm font-medium text-gray-700">Patient Message:</p>
-                      <p className="text-sm text-gray-600">{checkIn.patientMessage}</p>
+                    <div className="mt-4 p-3 bg-white/5 rounded-md">
+                      <p className="text-sm font-medium text-white">Patient Message:</p>
+                      <p className="text-sm text-gray-300">{checkIn.patientMessage}</p>
                     </div>
                   )}
 
                   {checkIn.aiResponse && (
-                    <div className="mt-2 p-3 bg-blue-50 rounded-md">
-                      <p className="text-sm font-medium text-blue-700">AI Response:</p>
-                      <p className="text-sm text-blue-600">{checkIn.aiResponse}</p>
+                    <div className="mt-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                      <p className="text-sm font-medium text-blue-400">AI Response:</p>
+                      <p className="text-sm text-blue-300">{checkIn.aiResponse}</p>
                     </div>
                   )}
 

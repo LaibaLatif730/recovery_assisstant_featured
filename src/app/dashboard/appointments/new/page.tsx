@@ -35,7 +35,7 @@ export default function NewAppointmentPage() {
     try {
       const res = await fetch('/api/patients')
       const data = await res.json()
-      setPatients(data)
+      setPatients(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching patients:', error)
     }
@@ -84,7 +84,7 @@ export default function NewAppointmentPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">{error}</div>
+              <div className="p-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-md">{error}</div>
             )}
 
             <div className="space-y-2">

@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import dynamic from 'next/dynamic'
+
+const Charts = dynamic(() => import('./charts'), { ssr: false, loading: () => <div className="h-[300px] flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div> })
 
 interface Analytics {
   totalPatients: number
@@ -13,6 +15,8 @@ interface Analytics {
   escalatedCheckIns: number
   riskDistribution: { level: string; count: number }[]
   treatmentTypeDistribution: { type: string; count: number }[]
+  complicationStats: { type: string; count: number }[]
+  weeklyTrend: { date: string; count: number }[]
 }
 
 export default function AnalyticsPage() {
@@ -20,25 +24,27 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchAnalytics()
+    fetch('/api/analytics').then(r => r.json()).then(d => { setAnalytics(d); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
-  const fetchAnalytics = async () => {
-    try {
-      const res = await fetch('/api/analytics')
-      const data = await res.json()
-      setAnalytics(data)
-    } catch (error) {
-      console.error('Error fetching analytics:', error)
-    } finally {
-      setLoading(false)
+  const stats = useMemo(() => {
+    if (!analytics) return { responseRate: 0, interventionRate: 0 }
+    const total = (analytics.completedCheckIns || 0) + (analytics.pendingCheckIns || 0) + (analytics.escalatedCheckIns || 0)
+    return {
+      responseRate: total > 0 ? Math.round((analytics.completedCheckIns / total) * 100) : 0,
+      interventionRate: total > 0 ? Math.round((analytics.escalatedCheckIns / total) * 100) : 0,
     }
-  }
+  }, [analytics])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-6">
+        <div><h1 className="text-2xl font-bold text-white">Clinical Analytics</h1></div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}><CardContent className="pt-6"><div className="h-8 w-20 bg-white/10 rounded animate-pulse mb-2"></div><div className="h-4 w-32 bg-white/5 rounded animate-pulse"></div></CardContent></Card>
+          ))}
+        </div>
       </div>
     )
   }
@@ -46,162 +52,32 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Analytics</h1>
-        <p className="text-muted-foreground">Clinic performance insights</p>
+        <h1 className="text-2xl font-bold text-white">Clinical Analytics</h1>
+        <p className="text-muted-foreground">Practice performance and outcome metrics</p>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Patient Response Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {analytics?.completedCheckIns && analytics.pendingCheckIns
-                ? Math.round((analytics.completedCheckIns / (analytics.completedCheckIns + analytics.pendingCheckIns)) * 100)
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">Check-in completion rate</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Doctor Intervention Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {analytics?.escalatedCheckIns && analytics.completedCheckIns
-                ? Math.round((analytics.escalatedCheckIns / (analytics.completedCheckIns + analytics.escalatedCheckIns)) * 100)
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">Cases requiring review</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Treatment Retention</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {analytics?.totalAppointments && analytics.totalTreatments
-                ? Math.round((analytics.totalTreatments / analytics.totalAppointments) * 100)
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">Treatments per appointment</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Patients</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{analytics?.totalPatients || 0}</div>
-            <p className="text-xs text-muted-foreground">Registered patients</p>
-          </CardContent>
-        </Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Response Rate</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.responseRate}%</div><p className="text-xs text-muted-foreground">Check-in completion</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Intervention Rate</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.interventionRate}%</div><p className="text-xs text-muted-foreground">Cases requiring review</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Active Patients</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{analytics?.totalPatients || 0}</div><p className="text-xs text-muted-foreground">Registered</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Total Treatments</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{analytics?.totalTreatments || 0}</div><p className="text-xs text-muted-foreground">Procedures</p></CardContent></Card>
       </div>
 
-      {/* Charts Section */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Risk Distribution</CardTitle>
-            <CardDescription>Patient recovery risk levels</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {analytics?.riskDistribution.map((risk) => (
-                <div key={risk.level} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant={
-                      risk.level === 'CRITICAL' ? 'destructive' :
-                      risk.level === 'HIGH' ? 'destructive' :
-                      risk.level === 'MEDIUM' ? 'secondary' : 'outline'
-                    }>
-                      {risk.level}
-                    </Badge>
-                    <span className="text-sm font-medium">{risk.count}</span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${
-                        risk.level === 'CRITICAL' ? 'bg-red-600' :
-                        risk.level === 'HIGH' ? 'bg-orange-500' :
-                        risk.level === 'MEDIUM' ? 'bg-yellow-500' : 'bg-green-500'
-                      }`}
-                      style={{
-                        width: `${analytics?.riskDistribution
-                          ? (risk.count / Math.max(...analytics.riskDistribution.map(r => r.count), 1)) * 100
-                          : 0}%`
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-              {(!analytics?.riskDistribution || analytics.riskDistribution.length === 0) && (
-                <p className="text-sm text-muted-foreground text-center py-4">No risk data available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      <Charts
+        riskDistribution={analytics?.riskDistribution || []}
+        complicationStats={analytics?.complicationStats || []}
+        weeklyTrend={analytics?.weeklyTrend || []}
+        treatmentTypeDistribution={analytics?.treatmentTypeDistribution || []}
+      />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Treatment Types</CardTitle>
-            <CardDescription>Distribution of treatments</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {analytics?.treatmentTypeDistribution.map((treatment) => (
-                <div key={treatment.type} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{treatment.type.replace(/_/g, ' ')}</span>
-                    <span className="text-sm font-medium">{treatment.count}</span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full bg-primary"
-                      style={{
-                        width: `${analytics?.treatmentTypeDistribution
-                          ? (treatment.count / Math.max(...analytics.treatmentTypeDistribution.map(t => t.count), 1)) * 100
-                          : 0}%`
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-              {(!analytics?.treatmentTypeDistribution || analytics.treatmentTypeDistribution.length === 0) && (
-                <p className="text-sm text-muted-foreground text-center py-4">No treatment data available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Summary Stats */}
       <Card>
-        <CardHeader>
-          <CardTitle>Summary</CardTitle>
-          <CardDescription>Key performance indicators</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle>Summary</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="text-center p-4 border rounded-lg">
-              <div className="text-3xl font-bold text-primary">{analytics?.totalPatients || 0}</div>
-              <p className="text-sm text-muted-foreground">Total Patients</p>
-            </div>
-            <div className="text-center p-4 border rounded-lg">
-              <div className="text-3xl font-bold text-primary">{analytics?.totalTreatments || 0}</div>
-              <p className="text-sm text-muted-foreground">Total Treatments</p>
-            </div>
-            <div className="text-center p-4 border rounded-lg">
-              <div className="text-3xl font-bold text-primary">{analytics?.totalAppointments || 0}</div>
-              <p className="text-sm text-muted-foreground">Total Appointments</p>
-            </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            <div className="text-center p-4 border rounded-lg"><div className="text-3xl font-bold text-primary">{analytics?.totalPatients || 0}</div><p className="text-sm text-muted-foreground">Patients</p></div>
+            <div className="text-center p-4 border rounded-lg"><div className="text-3xl font-bold text-primary">{analytics?.totalTreatments || 0}</div><p className="text-sm text-muted-foreground">Treatments</p></div>
+            <div className="text-center p-4 border rounded-lg"><div className="text-3xl font-bold text-primary">{analytics?.totalAppointments || 0}</div><p className="text-sm text-muted-foreground">Appointments</p></div>
+            <div className="text-center p-4 border rounded-lg"><div className="text-3xl font-bold text-primary">{analytics?.completedCheckIns || 0}</div><p className="text-sm text-muted-foreground">Check-ins</p></div>
           </div>
         </CardContent>
       </Card>

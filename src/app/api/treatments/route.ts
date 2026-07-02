@@ -36,18 +36,29 @@ export async function POST(req: Request) {
     const body = await req.json()
     const validatedData = treatmentSchema.parse(body)
 
+    let injectionAreasStr = '[]'
+    if (validatedData.injectionAreas) {
+      try {
+        const parsed = JSON.parse(validatedData.injectionAreas)
+        injectionAreasStr = JSON.stringify(parsed)
+      } catch {
+        const arr = validatedData.injectionAreas.split(',').map((s: string) => s.trim()).filter(Boolean)
+        injectionAreasStr = JSON.stringify(arr)
+      }
+    }
+
     const treatment = await prisma.treatment.create({
       data: {
         patientId: validatedData.patientId,
-        doctorId: validatedData.doctorId,
-        clinicId: validatedData.clinicId,
+        doctorId: validatedData.doctorId || undefined,
+        clinicId: validatedData.clinicId || undefined,
         type: validatedData.type,
-        productName: validatedData.productName,
-        units: validatedData.units,
-        injectionAreas: validatedData.injectionAreas ? JSON.parse(validatedData.injectionAreas) : [],
+        productName: validatedData.productName || undefined,
+        units: validatedData.units || undefined,
+        injectionAreas: injectionAreasStr,
         treatmentDate: new Date(validatedData.treatmentDate),
-        notes: validatedData.notes,
-        aftercareNotes: validatedData.aftercareNotes,
+        notes: validatedData.notes || undefined,
+        aftercareNotes: validatedData.aftercareNotes || undefined,
       },
     })
 

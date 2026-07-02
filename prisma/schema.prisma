@@ -51,6 +51,7 @@ model Clinic {
   doctors   Doctor[]
   patients  Patient[]
   treatments Treatment[]
+  products  Product[]
 
   @@index([name])
 }
@@ -72,6 +73,7 @@ model Doctor {
   treatments    Treatment[]
   appointments  Appointment[]
   doctorNotes   DoctorNote[]
+  injectionMappings InjectionMapping[]
 
   @@index([userId])
 }
@@ -93,6 +95,8 @@ model Patient {
   address         String?
   medicalHistory  String?
   allergies       String?
+  medications     String?
+  emergencyContact String?
   consentGiven    Boolean  @default(false)
   consentDate     DateTime?
   isActive        Boolean  @default(true)
@@ -105,10 +109,78 @@ model Patient {
   appointments    Appointment[]
   surveys         Survey[]
   reviews         Review[]
+  consentRecords  ConsentRecord[]
+  complications   ComplicationRecord[]
+  clinicalNotes   ClinicalNote[]
 
   @@index([email])
   @@index([phone])
   @@index([clinicId])
+}
+
+// ─── Products ─────────────────────────────────────────────────
+
+model Product {
+  id            String   @id @default(cuid())
+  name          String
+  category      String
+  manufacturer  String?
+  description   String?
+  clinicId      String?
+  clinic        Clinic?  @relation(fields: [clinicId], references: [id])
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  batches       ProductBatch[]
+  injectionMappings InjectionMapping[]
+  treatments    Treatment[]
+
+  @@index([name])
+  @@index([category])
+}
+
+// ─── Product Batches ──────────────────────────────────────────
+
+model ProductBatch {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  batchNumber   String
+  expiryDate    DateTime
+  quantity      Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  injectionMappings InjectionMapping[]
+
+  @@unique([productId, batchNumber])
+  @@index([batchNumber])
+  @@index([expiryDate])
+}
+
+// ─── Treatment Protocols ──────────────────────────────────────
+
+model TreatmentProtocol {
+  id              String   @id @default(cuid())
+  procedureType   String   @unique
+  category        String
+  substance       String?
+  typicalVolumes  String?
+  recoveryTimeline String
+  normalSymptoms  String
+  warningSigns    String
+  emergencySigns  String
+  followUpSchedule String
+  contraindications String
+  postProcedureInstructions String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([procedureType])
+  @@index([category])
 }
 
 // ─── Treatments ───────────────────────────────────────────────
@@ -123,7 +195,10 @@ model Treatment {
   clinic          Clinic?  @relation(fields: [clinicId], references: [id])
   type            String
   productName     String?
+  productId       String?
+  product         Product? @relation(fields: [productId], references: [id])
   units           Float?
+  volume          Float?
   injectionAreas  String   @default("[]")
   treatmentDate   DateTime @default(now())
   notes           String?
@@ -135,10 +210,42 @@ model Treatment {
 
   checkIns        RecoveryCheckIn[]
   doctorNotes     DoctorNote[]
+  injectionMappings InjectionMapping[]
+  complications   ComplicationRecord[]
+  clinicalNotes   ClinicalNote[]
+  clinicalDocuments ClinicalDocument[]
 
   @@index([patientId])
   @@index([treatmentDate])
   @@index([type])
+}
+
+// ─── Injection Mapping ────────────────────────────────────────
+
+model InjectionMapping {
+  id              String   @id @default(cuid())
+  treatmentId     String
+  treatment       Treatment @relation(fields: [treatmentId], references: [id])
+  doctorId        String?
+  doctor          Doctor?  @relation(fields: [doctorId], references: [id])
+  area            String
+  subArea         String?
+  units           Float?
+  volume          Float?
+  productId       String?
+  product         Product? @relation(fields: [productId], references: [id])
+  batchId         String?
+  batch           ProductBatch? @relation(fields: [batchId], references: [id])
+  technique       String?
+  needleCannula   String?
+  depth           String?
+  aspiration      String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([treatmentId])
+  @@index([area])
+  @@index([productId])
 }
 
 // ─── Recovery Check-ins ───────────────────────────────────────
@@ -155,7 +262,7 @@ model RecoveryCheckIn {
   status          String   @default("PENDING")
   patientMessage  String?
   aiResponse      String?
-  riskLevel       String   @default("LOW")
+  riskLevel       String   @default("GREEN")
   symptoms        String   @default("[]")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -168,6 +275,7 @@ model RecoveryCheckIn {
   @@index([patientId])
   @@index([scheduledDate])
   @@index([status])
+  @@index([riskLevel])
 }
 
 // ─── Patient Photos ───────────────────────────────────────────
@@ -183,6 +291,7 @@ model PatientPhoto {
   uploadDate      DateTime @default(now())
   qualityScore    Float?
   metadata        String?
+  timepoint       String?
   createdAt       DateTime @default(now())
 
   aiAnalyses      AIAnalysis[]
@@ -204,20 +313,116 @@ model AIAnalysis {
   bruisingScore   Float    @default(0)
   rednessScore    Float    @default(0)
   asymmetryScore  Float    @default(0)
+  noduleScore     Float    @default(0)
+  vascularityScore Float   @default(0)
   overallScore    Float    @default(0)
   confidenceScore Float    @default(0)
+  riskLevel       String   @default("GREEN")
+  clinicalFeatures String   @default("{}")
   status          String   @default("PENDING")
   findings        String   @default("[]")
   recommendations String   @default("[]")
+  clinicalSummary String?
+  recommendedAction String?
   rawResponse     String?
   doctorOverride  Boolean  @default(false)
   doctorNotes     String?
+  overrideRiskLevel String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([photoId])
   @@index([checkInId])
+  @@index([riskLevel])
   @@index([status])
+}
+
+// ─── Consent Records ──────────────────────────────────────────
+
+model ConsentRecord {
+  id              String   @id @default(cuid())
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id])
+  consentType     String
+  version         String
+  status          String   @default("ACTIVE")
+  givenDate       DateTime @default(now())
+  withdrawnDate   DateTime?
+  documentUrl     String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([consentType])
+  @@index([status])
+}
+
+// ─── Complication Records ─────────────────────────────────────
+
+model ComplicationRecord {
+  id              String   @id @default(cuid())
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id])
+  treatmentId     String?
+  treatment       Treatment? @relation(fields: [treatmentId], references: [id])
+  complicationType String
+  description     String?
+  severity        String
+  onsetDate       DateTime
+  resolutionDate  DateTime?
+  treatmentGiven  String?
+  outcome         String?
+  reportedToRegulatory Boolean @default(false)
+  batchNumber     String?
+  productUsed     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([treatmentId])
+  @@index([complicationType])
+  @@index([severity])
+}
+
+// ─── Clinical Notes ───────────────────────────────────────────
+
+model ClinicalNote {
+  id              String   @id @default(cuid())
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id])
+  doctorId        String?
+  treatmentId     String?
+  treatment       Treatment? @relation(fields: [treatmentId], references: [id])
+  checkInId       String?
+  noteType        String
+  content         String
+  isAiGenerated   Boolean  @default(false)
+  isPrivate       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([noteType])
+  @@index([createdAt])
+}
+
+// ─── Clinical Documents ───────────────────────────────────────
+
+model ClinicalDocument {
+  id              String   @id @default(cuid())
+  treatmentId     String
+  treatment       Treatment @relation(fields: [treatmentId], references: [id])
+  documentType    String
+  content         String
+  generatedBy     String   @default("AI")
+  doctorApproved  Boolean  @default(false)
+  doctorId        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([treatmentId])
+  @@index([documentType])
 }
 
 // ─── Doctor Notes ─────────────────────────────────────────────

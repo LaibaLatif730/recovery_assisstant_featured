@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import Link from 'next/link'
 
 interface Analytics {
   totalPatients: number
@@ -13,6 +14,7 @@ interface Analytics {
   escalatedCheckIns: number
   riskDistribution: { level: string; count: number }[]
   recentAlerts: any[]
+  complications: { total: number; active: number; vascular: number }
 }
 
 export default function DashboardPage() {
@@ -27,7 +29,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch('/api/analytics')
       const data = await res.json()
-      setAnalytics(data)
+      if (data && !data.error) setAnalytics(data)
     } catch (error) {
       console.error('Error fetching analytics:', error)
     } finally {
@@ -46,8 +48,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back! Here&apos;s what&apos;s happening at your clinic.</p>
+        <h1 className="text-2xl font-bold text-white">Clinical Dashboard</h1>
+        <p className="text-muted-foreground">Clinical decision support overview</p>
       </div>
 
       {/* Stats Grid */}
@@ -61,7 +63,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{analytics?.totalPatients || 0}</div>
-            <p className="text-xs text-muted-foreground">+12% from last month</p>
+            <p className="text-xs text-muted-foreground">Active patients</p>
           </CardContent>
         </Card>
 
@@ -74,33 +76,33 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{analytics?.totalTreatments || 0}</div>
-            <p className="text-xs text-muted-foreground">+8% from last month</p>
+            <p className="text-xs text-muted-foreground">Total procedures</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Check-ins</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Reviews</CardTitle>
             <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{analytics?.pendingCheckIns || 0}</div>
-            <p className="text-xs text-muted-foreground">Awaiting patient response</p>
+            <p className="text-xs text-muted-foreground">Awaiting clinician review</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Escalated</CardTitle>
+            <CardTitle className="text-sm font-medium">Escalated Cases</CardTitle>
             <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{analytics?.escalatedCheckIns || 0}</div>
-            <p className="text-xs text-muted-foreground">Requires attention</p>
+            <p className="text-xs text-muted-foreground">Requires immediate attention</p>
           </CardContent>
         </Card>
       </div>
@@ -109,8 +111,8 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Risk Distribution</CardTitle>
-            <CardDescription>Patient recovery risk levels</CardDescription>
+            <CardTitle>Clinical Risk Distribution</CardTitle>
+            <CardDescription>Patient recovery risk classification</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -118,12 +120,17 @@ export default function DashboardPage() {
                 <div key={risk.level} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge variant={
-                      risk.level === 'CRITICAL' ? 'destructive' :
-                      risk.level === 'HIGH' ? 'destructive' :
-                      risk.level === 'MEDIUM' ? 'secondary' : 'outline'
+                      risk.level === 'RED' ? 'destructive' :
+                      risk.level === 'ORANGE' ? 'destructive' :
+                      risk.level === 'YELLOW' ? 'secondary' : 'outline'
                     }>
                       {risk.level}
                     </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {risk.level === 'GREEN' ? 'Normal Recovery' :
+                       risk.level === 'YELLOW' ? 'Needs Review (24h)' :
+                       risk.level === 'ORANGE' ? 'Priority Review (4h)' : 'Immediate Alert'}
+                    </span>
                   </div>
                   <span className="font-medium">{risk.count}</span>
                 </div>
@@ -137,7 +144,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Recent Alerts</CardTitle>
+            <CardTitle>Clinical Alerts</CardTitle>
             <CardDescription>Patients requiring attention</CardDescription>
           </CardHeader>
           <CardContent>
@@ -148,7 +155,9 @@ export default function DashboardPage() {
                     <p className="font-medium">{alert.patient.firstName} {alert.patient.lastName}</p>
                     <p className="text-sm text-muted-foreground">Day {alert.dayNumber} check-in</p>
                   </div>
-                  <Badge variant="destructive">{alert.riskLevel}</Badge>
+                  <Badge variant={alert.riskLevel === 'RED' || alert.riskLevel === 'ORANGE' ? 'destructive' : 'secondary'}>
+                    {alert.riskLevel}
+                  </Badge>
                 </div>
               ))}
               {(!analytics?.recentAlerts || analytics.recentAlerts.length === 0) && (
@@ -162,35 +171,35 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <Card>
         <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks</CardDescription>
+          <CardTitle>Clinical Actions</CardTitle>
+          <CardDescription>Quick access to clinical workflows</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
-            <a href="/dashboard/patients/new" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
+            <Link href="/dashboard/patients/new" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
               <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
               </svg>
               <span className="text-sm font-medium text-white">Add Patient</span>
-            </a>
-            <a href="/dashboard/treatments/new" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
+            </Link>
+            <Link href="/dashboard/injection-mapping" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
               <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               </svg>
-              <span className="text-sm font-medium text-white">Record Treatment</span>
-            </a>
-            <a href="/dashboard/appointments/new" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
+              <span className="text-sm font-medium text-white">Injection Map</span>
+            </Link>
+            <Link href="/dashboard/complications" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
               <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              <span className="text-sm font-medium text-white">Book Appointment</span>
-            </a>
-            <a href="/dashboard/checkins" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
+              <span className="text-sm font-medium text-white">Complications</span>
+            </Link>
+            <Link href="/dashboard/documents" className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:bg-white/5 transition-colors">
               <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <span className="text-sm font-medium text-white">View Check-ins</span>
-            </a>
+              <span className="text-sm font-medium text-white">Documents</span>
+            </Link>
           </div>
         </CardContent>
       </Card>

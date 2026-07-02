@@ -59,6 +59,66 @@ async function main() {
     },
   })
 
+  // Create products
+  const products = await Promise.all([
+    prisma.product.create({
+      data: {
+        name: 'Botox 100u',
+        category: 'NEUROMODULATOR',
+        manufacturer: 'Allergan',
+        description: 'Botulinum Toxin Type A 100 units',
+        clinicId: clinic.id,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        name: 'Juvederm Ultra XC',
+        category: 'HYALURONIC_ACID_FILLER',
+        manufacturer: 'Allergan',
+        description: 'Hyaluronic acid filler 1mL',
+        clinicId: clinic.id,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        name: 'Juvederm Volbella',
+        category: 'HYALURONIC_ACID_FILLER',
+        manufacturer: 'Allergan',
+        description: 'Hyaluronic acid filler for lips 1mL',
+        clinicId: clinic.id,
+      },
+    }),
+    prisma.product.create({
+      data: {
+        name: 'Radiesse',
+        category: 'CALCIUM_HYDROXYLAPATITE_FILLER',
+        manufacturer: 'Merz',
+        description: 'Calcium hydroxylapatite filler 1.5mL',
+        clinicId: clinic.id,
+      },
+    }),
+  ])
+
+  // Create product batches
+  const batches = await Promise.all([
+    prisma.productBatch.create({
+      data: {
+        productId: products[0].id,
+        batchNumber: 'BTX-2026-04521',
+        expiryDate: new Date('2027-06-01'),
+        quantity: 50,
+      },
+    }),
+    prisma.productBatch.create({
+      data: {
+        productId: products[1].id,
+        batchNumber: 'JUV-2026-08832',
+        expiryDate: new Date('2027-03-15'),
+        quantity: 30,
+      },
+    }),
+  ])
+
   const patients = await Promise.all([
     prisma.patient.create({
       data: {
@@ -71,6 +131,8 @@ async function main() {
         clinicId: clinic.id,
         consentGiven: true,
         consentDate: new Date(),
+        medicalHistory: 'No significant medical history',
+        allergies: 'No known allergies',
       },
     }),
     prisma.patient.create({
@@ -101,6 +163,69 @@ async function main() {
     }),
   ])
 
+  // Create treatment protocols
+  const protocols = [
+    {
+      procedureType: 'BOTOX',
+      category: 'Neuromodulator',
+      substance: 'Botulinum Toxin Type A',
+      typicalVolumes: '20-64 units',
+      recoveryTimeline: JSON.stringify({
+        day_0_1: 'Onset of effect begins. Mild swelling at injection sites possible.',
+        day_2_7: 'Effect becoming visible. Peak effect at Day 14.',
+        day_7_14: 'Full effect achieved. Any asymmetry may be assessed.',
+      }),
+      normalSymptoms: JSON.stringify(['Mild swelling at injection sites', 'Minor bruising', 'Headache']),
+      warningSigns: JSON.stringify(['Brow ptosis', 'Eyelid droop', 'Difficulty swallowing']),
+      emergencySigns: JSON.stringify(['Difficulty breathing', 'Difficulty swallowing', 'Voice changes']),
+      followUpSchedule: JSON.stringify([
+        { day: 1, type: 'Photo + Questionnaire', purpose: 'Early assessment' },
+        { day: 7, type: 'Photo + Questionnaire', purpose: 'Effect assessment' },
+        { day: 14, type: 'Photo + Questionnaire', purpose: 'Full effect evaluation' },
+      ]),
+      contraindications: JSON.stringify(['Known allergy to botulinum toxin', 'Infection at treatment site', 'Pregnancy']),
+      postProcedureInstructions: JSON.stringify([
+        'Do not lie down for 4 hours after treatment',
+        'Avoid rubbing or massaging the treated area for 24 hours',
+        'Avoid strenuous exercise for 24 hours',
+      ]),
+    },
+    {
+      procedureType: 'FILLER_HYALURONIC',
+      category: 'Dermal Filler',
+      substance: 'Hyaluronic Acid',
+      typicalVolumes: '0.5mL - 2.0mL',
+      recoveryTimeline: JSON.stringify({
+        day_0_1: 'Peak swelling and bruising expected. Ice recommended.',
+        day_2_3: 'Swelling begins to subside.',
+        day_4_7: 'Major swelling resolved. Minor asymmetry possible.',
+        day_7_14: 'Near-final result visible.',
+        day_14_30: 'Final result achieved.',
+      }),
+      normalSymptoms: JSON.stringify(['Swelling', 'Bruising', 'Tenderness', 'Firmness at injection site']),
+      warningSigns: JSON.stringify(['Increasing swelling after Day 3', 'Blanching or white discoloration', 'Severe pain']),
+      emergencySigns: JSON.stringify(['Sudden severe pain', 'Blanching of skin', 'Visual changes', 'Skin necrosis indicators']),
+      followUpSchedule: JSON.stringify([
+        { day: 1, type: 'Photo + Questionnaire', purpose: 'Early assessment' },
+        { day: 3, type: 'Photo + Questionnaire', purpose: 'Swelling monitoring' },
+        { day: 7, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+        { day: 14, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+        { day: 30, type: 'Photo + Questionnaire', purpose: 'Final result documentation' },
+      ]),
+      contraindications: JSON.stringify(['Active infection at treatment site', 'Known allergy to product components', 'Pregnancy']),
+      postProcedureInstructions: JSON.stringify([
+        'Apply ice packs for 10 minutes on, 10 minutes off for first 24 hours',
+        'Avoid strenuous exercise for 48 hours',
+        'Avoid extreme heat for 48 hours',
+        'Sleep elevated for first 2 nights',
+      ]),
+    },
+  ]
+
+  for (const protocol of protocols) {
+    await prisma.treatmentProtocol.create({ data: protocol })
+  }
+
   const treatments = await Promise.all([
     prisma.treatment.create({
       data: {
@@ -108,9 +233,9 @@ async function main() {
         doctorId: doctor.id,
         clinicId: clinic.id,
         type: 'BOTOX',
-        productName: 'Botox',
+        productName: 'Botox 100u',
         units: 20,
-        injectionAreas: JSON.stringify(['Forehead', 'Glabella', 'Crow\'s feet']),
+        injectionAreas: JSON.stringify(['Forehead', 'Glabella', 'Crow\'s Feet']),
         treatmentDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
         notes: 'Standard Botox treatment for forehead wrinkles',
         aftercareNotes: 'Avoid lying down for 4 hours. No strenuous exercise for 24 hours.',
@@ -122,8 +247,9 @@ async function main() {
         doctorId: doctor.id,
         clinicId: clinic.id,
         type: 'FILLER_HYALURONIC',
-        productName: 'Juvederm',
+        productName: 'Juvederm Ultra XC',
         units: 1,
+        volume: 1.0,
         injectionAreas: JSON.stringify(['Lips', 'Nasolabial folds']),
         treatmentDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
         notes: 'Lip augmentation and nasolabial fold treatment',
@@ -136,12 +262,61 @@ async function main() {
         doctorId: doctor.id,
         clinicId: clinic.id,
         type: 'BOTOX',
-        productName: 'Botox',
+        productName: 'Botox 100u',
         units: 16,
         injectionAreas: JSON.stringify(['Forehead', 'Brow lift']),
         treatmentDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
         notes: 'Botox for forehead and brow lift',
         aftercareNotes: 'Avoid touching the treated area for 4 hours.',
+      },
+    }),
+  ])
+
+  // Create injection mappings
+  await Promise.all([
+    prisma.injectionMapping.create({
+      data: {
+        treatmentId: treatments[0].id,
+        doctorId: doctor.id,
+        area: 'Forehead',
+        subArea: 'Mid Forehead',
+        units: 10,
+        productId: products[0].id,
+        batchId: batches[0].id,
+        technique: 'Serial Puncture',
+        needleCannula: '30G needle',
+        depth: 'INTRADERMAL',
+        aspiration: 'YES',
+      },
+    }),
+    prisma.injectionMapping.create({
+      data: {
+        treatmentId: treatments[0].id,
+        doctorId: doctor.id,
+        area: 'Glabella',
+        subArea: 'Corrugator Supercilii',
+        units: 10,
+        productId: products[0].id,
+        batchId: batches[0].id,
+        technique: 'Serial Puncture',
+        needleCannula: '30G needle',
+        depth: 'INTRADERMAL',
+        aspiration: 'YES',
+      },
+    }),
+    prisma.injectionMapping.create({
+      data: {
+        treatmentId: treatments[1].id,
+        doctorId: doctor.id,
+        area: 'Lips',
+        subArea: 'Upper Lip Body',
+        volume: 0.5,
+        productId: products[2].id,
+        batchId: batches[1].id,
+        technique: 'Linear Threading',
+        needleCannula: '27G cannula',
+        depth: 'SUBDERMAL',
+        aspiration: 'N/A',
       },
     }),
   ])
@@ -159,7 +334,7 @@ async function main() {
           dayNumber,
           scheduledDate,
           status: isCompleted ? 'COMPLETED' : 'PENDING',
-          riskLevel: dayNumber <= 2 ? 'LOW' : 'MEDIUM',
+          riskLevel: 'GREEN',
           completedDate: isCompleted ? scheduledDate : null,
         },
       })
@@ -207,6 +382,28 @@ async function main() {
     }),
   ])
 
+  // Create consent records
+  await Promise.all([
+    prisma.consentRecord.create({
+      data: {
+        patientId: patients[0].id,
+        consentType: 'TREATMENT',
+        version: '2.0',
+        status: 'ACTIVE',
+        givenDate: new Date(),
+      },
+    }),
+    prisma.consentRecord.create({
+      data: {
+        patientId: patients[0].id,
+        consentType: 'PHOTO',
+        version: '1.0',
+        status: 'ACTIVE',
+        givenDate: new Date(),
+      },
+    }),
+  ])
+
   console.log('Database seeded successfully!')
   console.log('Clinic:', clinic.name)
   console.log('Admin:', adminUser.email, '/ admin123')
@@ -214,6 +411,8 @@ async function main() {
   console.log('Receptionist:', receptionistUser.email, '/ patient123')
   console.log('Patients:', patients.length)
   console.log('Treatments:', treatments.length)
+  console.log('Products:', products.length)
+  console.log('Protocols:', protocols.length)
 }
 
 main()

@@ -221,6 +221,28 @@ body {
   background: rgba(255, 255, 255, 0.12);
 }
 
+select {
+  color: white !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+select option {
+  background: #1a1a3e !important;
+  color: white !important;
+  padding: 8px 12px;
+}
+
+select option[value=""] {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+label {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
 /* Badge styles */
 .badge-glass {
   display: inline-flex;
