@@ -8,6 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate } from '@/lib/utils'
+import { FieldError } from '@/components/FieldError'
+import { complicationSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 interface Complication {
   id: string
@@ -69,6 +72,8 @@ export default function ComplicationsPage() {
     batchNumber: '',
     productUsed: '',
   })
+  const [formError, setFormError] = useState('')
+  const { validate, getFieldError } = useZodForm(complicationSchema)
 
   useEffect(() => {
     fetchComplications()
@@ -100,6 +105,12 @@ export default function ComplicationsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError('')
+
+    if (!validate(form)) {
+      return
+    }
+
     try {
       const res = await fetch('/api/complications', {
         method: 'POST',
@@ -115,9 +126,13 @@ export default function ComplicationsPage() {
           treatmentGiven: '', outcome: '', batchNumber: '', productUsed: '',
         })
         fetchComplications()
+      } else {
+        const data = await res.json()
+        setFormError(data.error || 'Failed to create complication')
       }
     } catch (error) {
       console.error('Error creating complication:', error)
+      setFormError('Failed to create complication')
     }
   }
 
@@ -188,6 +203,11 @@ export default function ComplicationsPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
+                  {formError}
+                </div>
+              )}
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Patient *</label>
@@ -197,6 +217,7 @@ export default function ComplicationsPage() {
                       <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('patientId')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Complication Type *</label>
@@ -205,6 +226,7 @@ export default function ComplicationsPage() {
                       <option key={c.value} value={c.value}>{c.label}</option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('complicationType')} />
                 </div>
               </div>
 
@@ -216,30 +238,36 @@ export default function ComplicationsPage() {
                       <option key={s.value} value={s.value}>{s.label}</option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('severity')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Onset Date *</label>
                   <Input type="date" value={form.onsetDate} onChange={(e) => setForm({ ...form, onsetDate: e.target.value })} required />
+                  <FieldError error={getFieldError('onsetDate')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Product Used</label>
-                  <Input value={form.productUsed} onChange={(e) => setForm({ ...form, productUsed: e.target.value })} placeholder="Product name" />
+                  <Input value={form.productUsed} onChange={(e) => setForm({ ...form, productUsed: e.target.value })} placeholder="Product name" maxLength={100} />
+                  <FieldError error={getFieldError('productUsed')} />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Description</label>
-                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe the complication..." rows={3} />
+                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe the complication..." rows={3} maxLength={2000} />
+                <FieldError error={getFieldError('description')} />
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Treatment Given</label>
-                  <Textarea value={form.treatmentGiven} onChange={(e) => setForm({ ...form, treatmentGiven: e.target.value })} placeholder="Treatment interventions..." rows={2} />
+                  <Textarea value={form.treatmentGiven} onChange={(e) => setForm({ ...form, treatmentGiven: e.target.value })} placeholder="Treatment interventions..." rows={2} maxLength={1000} />
+                  <FieldError error={getFieldError('treatmentGiven')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Outcome</label>
-                  <Textarea value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} placeholder="Outcome of treatment..." rows={2} />
+                  <Textarea value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} placeholder="Outcome of treatment..." rows={2} maxLength={1000} />
+                  <FieldError error={getFieldError('outcome')} />
                 </div>
               </div>
 

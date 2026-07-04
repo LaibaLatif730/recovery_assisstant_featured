@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { treatmentSchema } from '@/lib/validators'
 import { getRecoveryTimeline } from '@/lib/utils'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(req.url)
     const patientId = searchParams.get('patientId')
     const clinicId = searchParams.get('clinicId')
@@ -33,6 +39,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const validatedData = treatmentSchema.parse(body)
 
@@ -84,6 +95,64 @@ export async function POST(req: Request) {
     )
   } catch (error) {
     console.error('Error creating treatment:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const { id, ...updateData } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'Treatment ID is required' }, { status: 400 })
+    }
+
+    const allowedFields: Record<string, any> = {}
+    if (updateData.type) allowedFields.type = updateData.type
+    if (updateData.productName !== undefined) allowedFields.productName = updateData.productName
+    if (updateData.units !== undefined) allowedFields.units = updateData.units
+    if (updateData.notes !== undefined) allowedFields.notes = updateData.notes
+    if (updateData.aftercareNotes !== undefined) allowedFields.aftercareNotes = updateData.aftercareNotes
+    if (updateData.status) allowedFields.status = updateData.status
+    if (updateData.treatmentDate) allowedFields.treatmentDate = new Date(updateData.treatmentDate)
+
+    const treatment = await prisma.treatment.update({
+      where: { id },
+      data: allowedFields,
+    })
+
+    return NextResponse.json(treatment)
+  } catch (error) {
+    console.error('Error updating treatment:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'Treatment ID is required' }, { status: 400 })
+    }
+
+    await prisma.treatment.delete({ where: { id } })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting treatment:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

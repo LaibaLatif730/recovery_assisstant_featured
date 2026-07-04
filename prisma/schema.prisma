@@ -11,17 +11,19 @@ datasource db {
 // ─── Users & Auth ─────────────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String?
-  password      String
-  role          String    @default("PATIENT")
-  phone         String?
-  avatar        String?
-  clinicId      String?
-  clinic        Clinic?   @relation(fields: [clinicId], references: [id])
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String?
+  password        String
+  role            String    @default("PATIENT")
+  phone           String?
+  avatar          String?
+  clinicId        String?
+  clinic          Clinic?   @relation(fields: [clinicId], references: [id])
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   patients      Patient[] @relation("PatientUser")
   doctorProfile Doctor?   @relation("DoctorUser")

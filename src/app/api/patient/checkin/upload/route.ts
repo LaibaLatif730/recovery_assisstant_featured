@@ -19,6 +19,30 @@ export async function POST(req: Request) {
       )
     }
 
+    // Verify IDs are valid cuid format
+    if (!/^c[a-z0-9]{24,}$/.test(checkInId) || !/^c[a-z0-9]{24,}$/.test(patientId)) {
+      return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 })
+    }
+
+    // Verify the check-in belongs to this patient
+    const checkIn = await prisma.recoveryCheckIn.findUnique({
+      where: { id: checkInId },
+      include: { treatment: { select: { type: true } } },
+    })
+
+    if (!checkIn || checkIn.patientId !== patientId) {
+      return NextResponse.json({ error: 'Check-in not found or does not belong to this patient' }, { status: 404 })
+    }
+
+    // Verify patient exists and is active
+    const patient = await prisma.patient.findUnique({
+      where: { id: patientId, isActive: true },
+    })
+
+    if (!patient) {
+      return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
+    }
+
     const bytes = await file.arrayBuffer()
     let buffer = Buffer.from(bytes)
 
@@ -30,11 +54,6 @@ export async function POST(req: Request) {
     const imageUrl = blob.url
 
     const base64Image = await resizeImage(buffer, file.type)
-
-    const checkIn = await prisma.recoveryCheckIn.findUnique({
-      where: { id: checkInId },
-      include: { treatment: { select: { type: true } } },
-    })
 
     const grokResult = await analyzeWithGrok(
       base64Image,

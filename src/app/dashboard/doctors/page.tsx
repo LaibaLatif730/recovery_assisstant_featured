@@ -5,6 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { FieldError } from '@/components/FieldError'
+import { registerSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 interface Doctor {
   id: string
@@ -31,6 +34,8 @@ export default function DoctorsPage() {
     licenseNo: '',
   })
 
+  const { validate, getFieldError } = useZodForm(registerSchema)
+
   useEffect(() => { fetchDoctors() }, [])
 
   const fetchDoctors = async () => {
@@ -49,6 +54,11 @@ export default function DoctorsPage() {
     e.preventDefault()
     setSubmitting(true)
     setError('')
+
+    if (!validate({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined, role: 'DOCTOR' })) {
+      setSubmitting(false)
+      return
+    }
 
     try {
       const res = await fetch('/api/doctors', {
@@ -122,6 +132,7 @@ export default function DoctorsPage() {
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     required
                   />
+                  <FieldError error={getFieldError('name')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Email *</label>
@@ -132,6 +143,7 @@ export default function DoctorsPage() {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     required
                   />
+                  <FieldError error={getFieldError('email')} />
                 </div>
               </div>
 
@@ -146,15 +158,17 @@ export default function DoctorsPage() {
                     required
                     minLength={6}
                   />
+                  <FieldError error={getFieldError('password')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Phone</label>
                   <Input
                     type="tel"
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="Digits only, 7-15 characters"
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   />
+                  <FieldError error={getFieldError('phone')} />
                 </div>
               </div>
 

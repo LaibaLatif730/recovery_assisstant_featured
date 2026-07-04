@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { formatDateTime } from '@/lib/utils'
 
 interface Appointment {
@@ -18,9 +21,16 @@ interface Appointment {
   doctor: { user: { name: string } } | null
 }
 
+const APPOINTMENT_TYPES = ['CONSULTATION', 'TREATMENT', 'FOLLOW_UP', 'REVIEW', 'EMERGENCY', 'OTHER']
+
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null)
+  const [editForm, setEditForm] = useState({
+    appointmentDate: '', duration: '', type: '', notes: '', status: ''
+  })
+  const [error, setError] = useState('')
 
   useEffect(() => {
     fetchAppointments()
@@ -35,6 +45,84 @@ export default function AppointmentsPage() {
       console.error('Error fetching appointments:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleEdit = (appointment: Appointment) => {
+    setEditingAppointment(appointment)
+    setEditForm({
+      appointmentDate: appointment.appointmentDate ? new Date(appointment.appointmentDate).toISOString().slice(0, 16) : '',
+      duration: appointment.duration?.toString() || '30',
+      type: appointment.type,
+      notes: appointment.notes || '',
+      status: appointment.status,
+    })
+  }
+
+  const handleUpdate = async () => {
+    setError('')
+    try {
+      const res = await fetch('/api/appointments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingAppointment?.id,
+          ...editForm,
+          duration: parseInt(editForm.duration) || 30,
+        }),
+      })
+      if (res.ok) {
+        setEditingAppointment(null)
+        fetchAppointments()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to update appointment')
+      }
+    } catch {
+      setError('Failed to update appointment')
+    }
+  }
+
+  const handleConfirm = async (id: string) => {
+    setError('')
+    try {
+      const res = await fetch('/api/appointments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'CONFIRMED' }),
+      })
+      if (res.ok) fetchAppointments()
+      else setError('Failed to confirm appointment')
+    } catch {
+      setError('Failed to confirm appointment')
+    }
+  }
+
+  const handleCancel = async (id: string) => {
+    if (!confirm('Are you sure you want to cancel this appointment?')) return
+    setError('')
+    try {
+      const res = await fetch('/api/appointments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'CANCELLED' }),
+      })
+      if (res.ok) fetchAppointments()
+      else setError('Failed to cancel appointment')
+    } catch {
+      setError('Failed to cancel appointment')
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this appointment?')) return
+    setError('')
+    try {
+      const res = await fetch(`/api/appointments?id=${id}`, { method: 'DELETE' })
+      if (res.ok) fetchAppointments()
+      else setError('Failed to delete appointment')
+    } catch {
+      setError('Failed to delete appointment')
     }
   }
 
@@ -64,6 +152,57 @@ export default function AppointmentsPage() {
           </Button>
         </Link>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Edit Appointment Modal */}
+      {editingAppointment && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Edit Appointment</h2>
+              <Button size="sm" variant="outline" onClick={() => setEditingAppointment(null)}>Cancel</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Date & Time</label>
+                <Input type="datetime-local" value={editForm.appointmentDate} onChange={(e) => setEditForm({ ...editForm, appointmentDate: e.target.value })} min={new Date().toISOString().slice(0, 16)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Duration (min)</label>
+                <Input type="number" min="15" max="180" value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Type</label>
+                <Select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}>
+                  {APPOINTMENT_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <Select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
+                  <option value="SCHEDULED">Scheduled</option>
+                  <option value="CONFIRMED">Confirmed</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                  <option value="NO_SHOW">No Show</option>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3} />
+            </div>
+            <Button onClick={handleUpdate}>Save Changes</Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -124,13 +263,14 @@ export default function AppointmentsPage() {
                     </div>
                   </div>
                   <div className="mt-4 flex gap-2">
-                    <Button size="sm" variant="outline">Edit</Button>
+                    <Button size="sm" variant="outline" onClick={() => handleEdit(appointment)}>Edit</Button>
                     {appointment.status === 'SCHEDULED' && (
                       <>
-                        <Button size="sm" variant="outline">Confirm</Button>
-                        <Button size="sm" variant="destructive">Cancel</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleConfirm(appointment.id)}>Confirm</Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleCancel(appointment.id)}>Cancel</Button>
                       </>
                     )}
+                    <Button size="sm" variant="destructive" onClick={() => handleDelete(appointment.id)}>Delete</Button>
                   </div>
                 </div>
               ))}

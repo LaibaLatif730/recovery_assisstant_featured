@@ -4,17 +4,42 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FieldError } from '@/components/FieldError'
 
 export default function PatientLoginPage() {
   const router = useRouter()
   const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [phoneError, setPhoneError] = useState('')
+
+  const validatePhone = (value: string): boolean => {
+    const cleaned = value.replace(/[\s\-()+\s]/g, '')
+    if (!cleaned) {
+      setPhoneError('Phone number is required')
+      return false
+    }
+    if (!/^\d+$/.test(cleaned)) {
+      setPhoneError('Phone must contain only digits')
+      return false
+    }
+    if (cleaned.length < 7 || cleaned.length > 15) {
+      setPhoneError('Phone must be 7-15 digits')
+      return false
+    }
+    setPhoneError('')
+    return true
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError('')
+
+    if (!validatePhone(phone)) {
+      return
+    }
+
+    setLoading(true)
 
     try {
       const res = await fetch('/api/patient/auth', {
@@ -91,6 +116,7 @@ export default function PatientLoginPage() {
                 required
               />
             </div>
+            <FieldError error={phoneError} />
           </div>
 
           <Button 

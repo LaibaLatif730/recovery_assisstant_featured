@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { parseClinicalQuery } from '@/lib/utils'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const { query, clinicId } = body
 

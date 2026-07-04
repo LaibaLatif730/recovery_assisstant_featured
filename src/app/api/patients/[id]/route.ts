@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
     const patient = await prisma.patient.findUnique({
       where: { id },
@@ -46,12 +52,30 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
     const body = await req.json()
 
+    const allowedFields: Record<string, any> = {}
+    if (body.firstName) allowedFields.firstName = body.firstName
+    if (body.lastName) allowedFields.lastName = body.lastName
+    if (body.email !== undefined) allowedFields.email = body.email
+    if (body.phone !== undefined) allowedFields.phone = body.phone
+    if (body.dateOfBirth) allowedFields.dateOfBirth = new Date(body.dateOfBirth)
+    if (body.gender) allowedFields.gender = body.gender
+    if (body.address !== undefined) allowedFields.address = body.address
+    if (body.medicalHistory !== undefined) allowedFields.medicalHistory = body.medicalHistory
+    if (body.allergies !== undefined) allowedFields.allergies = body.allergies
+    if (body.medications !== undefined) allowedFields.medications = body.medications
+    if (body.emergencyContact !== undefined) allowedFields.emergencyContact = body.emergencyContact
+
     const patient = await prisma.patient.update({
       where: { id },
-      data: body,
+      data: allowedFields,
     })
 
     return NextResponse.json(patient)
@@ -66,6 +90,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
     await prisma.patient.update({
       where: { id },

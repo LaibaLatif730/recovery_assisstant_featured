@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { formatDate } from '@/lib/utils'
+import { FieldError } from '@/components/FieldError'
+import { clinicalNoteSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 interface ClinicalNote {
   id: string
@@ -41,6 +44,8 @@ export default function ClinicalNotesPage() {
     content: '',
     isPrivate: false,
   })
+  const [formError, setFormError] = useState('')
+  const { validate, getFieldError } = useZodForm(clinicalNoteSchema)
 
   useEffect(() => {
     fetchNotes()
@@ -72,6 +77,12 @@ export default function ClinicalNotesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError('')
+
+    if (!validate(form)) {
+      return
+    }
+
     try {
       const res = await fetch('/api/clinical-notes', {
         method: 'POST',
@@ -83,9 +94,13 @@ export default function ClinicalNotesPage() {
         setShowForm(false)
         setForm({ patientId: '', treatmentId: '', noteType: 'SOAP', content: '', isPrivate: false })
         fetchNotes()
+      } else {
+        const data = await res.json()
+        setFormError(data.error || 'Failed to create note')
       }
     } catch (error) {
       console.error('Error creating note:', error)
+      setFormError('Failed to create note')
     }
   }
 
@@ -122,6 +137,11 @@ export default function ClinicalNotesPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
+                  {formError}
+                </div>
+              )}
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Patient *</label>
@@ -131,6 +151,7 @@ export default function ClinicalNotesPage() {
                       <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('patientId')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Note Type *</label>
@@ -139,6 +160,7 @@ export default function ClinicalNotesPage() {
                       <option key={n.value} value={n.value}>{n.label}</option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('noteType')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Private Note</label>
@@ -146,6 +168,7 @@ export default function ClinicalNotesPage() {
                     <option value="false">No</option>
                     <option value="true">Yes</option>
                   </Select>
+                  <FieldError error={getFieldError('isPrivate')} />
                 </div>
               </div>
 
@@ -157,7 +180,9 @@ export default function ClinicalNotesPage() {
                   placeholder="Enter clinical note content..."
                   rows={8}
                   required
+                  maxLength={5000}
                 />
+                <FieldError error={getFieldError('content')} />
               </div>
 
               <div className="flex gap-4 pt-4">

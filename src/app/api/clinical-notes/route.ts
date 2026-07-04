@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { clinicalNoteSchema } from '@/lib/validators'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(req.url)
     const patientId = searchParams.get('patientId')
     const treatmentId = searchParams.get('treatmentId')
@@ -33,15 +39,20 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const validatedData = clinicalNoteSchema.parse(body)
 
     const note = await prisma.clinicalNote.create({
       data: {
         patientId: validatedData.patientId,
-        doctorId: validatedData.doctorId,
-        treatmentId: validatedData.treatmentId,
-        checkInId: validatedData.checkInId,
+        doctorId: validatedData.doctorId || undefined,
+        treatmentId: validatedData.treatmentId || undefined,
+        checkInId: validatedData.checkInId || undefined,
         noteType: validatedData.noteType,
         content: validatedData.content,
         isAiGenerated: validatedData.isAiGenerated,
@@ -55,6 +66,60 @@ export async function POST(req: Request) {
     return NextResponse.json(note, { status: 201 })
   } catch (error) {
     console.error('Error creating clinical note:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const { id, ...updateData } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'Note ID is required' }, { status: 400 })
+    }
+
+    const allowedFields: Record<string, any> = {}
+    if (updateData.content) allowedFields.content = updateData.content
+    if (updateData.noteType) allowedFields.noteType = updateData.noteType
+    if (updateData.isPrivate !== undefined) allowedFields.isPrivate = updateData.isPrivate
+
+    const note = await prisma.clinicalNote.update({
+      where: { id },
+      data: allowedFields,
+    })
+
+    return NextResponse.json(note)
+  } catch (error) {
+    console.error('Error updating clinical note:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'Note ID is required' }, { status: 400 })
+    }
+
+    await prisma.clinicalNote.delete({ where: { id } })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting clinical note:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

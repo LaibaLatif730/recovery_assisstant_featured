@@ -9,18 +9,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
     }
 
-    const patient = await prisma.patient.findFirst({
-      where: {
-        phone: phone,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-      },
+    const normalize = (s: string) => s.replace(/[^0-9]/g, '')
+    const normalizedInput = normalize(phone)
+
+    const patients = await prisma.patient.findMany({
+      where: { isActive: true },
+      select: { id: true, firstName: true, lastName: true, phone: true },
     })
+
+    const patient = patients.find(p => p.phone && normalize(p.phone) === normalizedInput)
 
     if (!patient) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })

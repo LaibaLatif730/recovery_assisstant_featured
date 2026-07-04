@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import prisma from '@/lib/db'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET() {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const doctors = await prisma.doctor.findMany({
       include: {
         user: { select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true } },
@@ -21,6 +27,15 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { name, email, password, phone, specialty, licenseNo, clinicId } = body
 
@@ -67,6 +82,15 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { id, isActive, specialty, licenseNo } = body
 

@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { formatDate } from '@/lib/utils'
+import { FieldError } from '@/components/FieldError'
+import { injectionMappingSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 interface InjectionMapping {
   id: string
@@ -71,6 +74,7 @@ export default function InjectionMappingPage() {
     aspiration: 'N/A',
     notes: '',
   })
+  const { validate, getFieldError } = useZodForm(injectionMappingSchema)
 
   useEffect(() => {
     fetchMappings()
@@ -102,6 +106,20 @@ export default function InjectionMappingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!validate({
+      treatmentId: form.treatmentId,
+      area: form.area,
+      subArea: form.subArea || undefined,
+      units: form.units ? parseFloat(form.units) : undefined,
+      volume: form.volume ? parseFloat(form.volume) : undefined,
+      technique: form.technique || undefined,
+      needleCannula: form.needleCannula || undefined,
+      depth: form.depth || undefined,
+      aspiration: form.aspiration || undefined,
+      notes: form.notes || undefined,
+    })) {
+      return
+    }
     try {
       const res = await fetch('/api/injection-mappings', {
         method: 'POST',
@@ -170,6 +188,7 @@ export default function InjectionMappingPage() {
                       </option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('treatmentId')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Area *</label>
@@ -179,21 +198,25 @@ export default function InjectionMappingPage() {
                       <option key={a} value={a}>{a}</option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('area')} />
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Sub-Area</label>
-                  <Input value={form.subArea} onChange={(e) => setForm({ ...form, subArea: e.target.value })} placeholder="e.g., Left side" />
+                  <Input value={form.subArea} onChange={(e) => setForm({ ...form, subArea: e.target.value })} placeholder="e.g., Left side" maxLength={100} />
+                  <FieldError error={getFieldError('subArea')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Units</label>
                   <Input type="number" step="0.5" value={form.units} onChange={(e) => setForm({ ...form, units: e.target.value })} placeholder="Units" />
+                  <FieldError error={getFieldError('units')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Volume (mL)</label>
                   <Input type="number" step="0.05" value={form.volume} onChange={(e) => setForm({ ...form, volume: e.target.value })} placeholder="Volume" />
+                  <FieldError error={getFieldError('volume')} />
                 </div>
               </div>
 
@@ -206,10 +229,12 @@ export default function InjectionMappingPage() {
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </Select>
+                  <FieldError error={getFieldError('technique')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Needle/Cannula</label>
-                  <Input value={form.needleCannula} onChange={(e) => setForm({ ...form, needleCannula: e.target.value })} placeholder="e.g., 30G needle" />
+                  <Input value={form.needleCannula} onChange={(e) => setForm({ ...form, needleCannula: e.target.value })} placeholder="e.g., 30G needle" maxLength={50} />
+                  <FieldError error={getFieldError('needleCannula')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Depth</label>
@@ -224,7 +249,8 @@ export default function InjectionMappingPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Notes</label>
-                <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Additional clinical notes" />
+                <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Additional clinical notes" maxLength={1000} />
+                <FieldError error={getFieldError('notes')} />
               </div>
 
               <div className="flex gap-4 pt-4">

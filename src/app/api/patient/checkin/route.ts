@@ -10,6 +10,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Check-in ID is required' }, { status: 400 })
     }
 
+    // Verify checkInId is a valid cuid format
+    if (!/^c[a-z0-9]{24,}$/.test(checkInId)) {
+      return NextResponse.json({ error: 'Invalid check-in ID format' }, { status: 400 })
+    }
+
     const checkIn = await prisma.recoveryCheckIn.findUnique({
       where: { id: checkInId },
       include: {

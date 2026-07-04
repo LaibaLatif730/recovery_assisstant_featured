@@ -14,8 +14,10 @@ interface CheckIn {
   riskLevel: string
   patientMessage: string
   aiResponse: string
+  symptoms: string | null
+  completedDate: string | null
   patient: { id: string; firstName: string; lastName: string; phone: string }
-  treatment: { id: string; type: string }
+  treatment: { id: string; type: string; treatmentDate: string }
   photos: any[]
   aiAnalyses: any[]
 }
@@ -24,6 +26,7 @@ export default function CheckInsPage() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCheckIns()
@@ -41,6 +44,10 @@ export default function CheckInsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const toggleDetails = (id: string) => {
+    setExpandedId(expandedId === id ? null : id)
   }
 
   const getRiskBadgeVariant = (level: string) => {
@@ -146,6 +153,7 @@ export default function CheckInsPage() {
                     </div>
                   </div>
 
+                  {/* Collapsed: always show patient message and AI response */}
                   {checkIn.patientMessage && (
                     <div className="mt-4 p-3 bg-white/5 rounded-md">
                       <p className="text-sm font-medium text-white">Patient Message:</p>
@@ -160,8 +168,47 @@ export default function CheckInsPage() {
                     </div>
                   )}
 
+                  {/* Expanded details section */}
+                  {expandedId === checkIn.id && (
+                    <div className="mt-4 p-4 bg-white/5 rounded-lg space-y-3 border border-white/10">
+                      <h4 className="font-medium text-white">Full Details</h4>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div><span className="text-muted-foreground">Patient ID:</span> {checkIn.patient.id}</div>
+                        <div><span className="text-muted-foreground">Phone:</span> {checkIn.patient.phone || 'N/A'}</div>
+                        <div><span className="text-muted-foreground">Treatment ID:</span> {checkIn.treatment.id}</div>
+                        <div><span className="text-muted-foreground">Treatment Date:</span> {formatDate(checkIn.treatment.treatmentDate)}</div>
+                        <div><span className="text-muted-foreground">Completed:</span> {checkIn.completedDate ? formatDate(checkIn.completedDate) : 'Not completed'}</div>
+                        {checkIn.symptoms && <div className="col-span-2"><span className="text-muted-foreground">Symptoms:</span> {checkIn.symptoms}</div>}
+                      </div>
+                      {checkIn.photos.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-white mb-2">Photos ({checkIn.photos.length})</p>
+                          <div className="flex gap-2">
+                            {checkIn.photos.map((photo: any) => (
+                              <div key={photo.id} className="w-16 h-16 rounded bg-white/10 flex items-center justify-center text-xs text-muted-foreground">
+                                Photo
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {checkIn.aiAnalyses.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-white mb-2">AI Analyses</p>
+                          {checkIn.aiAnalyses.map((analysis: any) => (
+                            <div key={analysis.id} className="p-2 bg-blue-500/10 rounded text-xs">
+                              Edema: {analysis.edemaScore}/10 | Ecchymosis: {analysis.ecchymosisScore}/10 | Erythema: {analysis.erythemaScore}/10
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="mt-4 flex gap-2">
-                    <Button size="sm" variant="outline">View Details</Button>
+                    <Button size="sm" variant="outline" onClick={() => toggleDetails(checkIn.id)}>
+                      {expandedId === checkIn.id ? 'Hide Details' : 'View Details'}
+                    </Button>
                     {checkIn.status === 'ESCALATED' && (
                       <Button size="sm">Take Action</Button>
                     )}

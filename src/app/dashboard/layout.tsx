@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/utils'
@@ -129,9 +130,7 @@ export default function DashboardLayout({
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('next-auth.session-token')
-    localStorage.removeItem('__Secure-next-auth.session-token')
-    router.push('/login')
+    signOut({ callbackUrl: '/login' })
   }
 
   const getNotifIcon = (type: string) => {

@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
+import { FieldError } from '@/components/FieldError'
+import { registerSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -19,6 +22,8 @@ export default function SignupPage() {
     role: 'DOCTOR',
   })
 
+  const { validate, getFieldError } = useZodForm(registerSchema)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -30,8 +35,7 @@ export default function SignupPage() {
       return
     }
 
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (!validate({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined, role: form.role as any })) {
       setLoading(false)
       return
     }
@@ -114,6 +118,7 @@ export default function SignupPage() {
                 required
               />
             </div>
+            <FieldError error={getFieldError('name')} />
           </div>
 
           <div className="space-y-2">
@@ -133,6 +138,7 @@ export default function SignupPage() {
                 required
               />
             </div>
+            <FieldError error={getFieldError('email')} />
           </div>
 
           <div className="space-y-2">
@@ -145,12 +151,13 @@ export default function SignupPage() {
               </div>
               <Input
                 type="tel"
-                placeholder="+1 (555) 000-0000"
+                placeholder="Digits only, 7-15 characters"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 className="pl-12"
               />
             </div>
+            <FieldError error={getFieldError('phone')} />
           </div>
 
           <div className="space-y-2">
@@ -195,6 +202,7 @@ export default function SignupPage() {
                 required
               />
             </div>
+            <FieldError error={getFieldError('password')} />
           </div>
 
           <div className="space-y-2">

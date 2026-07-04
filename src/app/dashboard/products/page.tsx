@@ -6,7 +6,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { formatDate } from '@/lib/utils'
+import { FieldError } from '@/components/FieldError'
+import { productSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 interface Product {
   id: string
@@ -36,8 +40,12 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showBatchForm, setShowBatchForm] = useState<string | null>(null)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [form, setForm] = useState({ name: '', category: 'NEUROMODULATOR', manufacturer: '', description: '' })
+  const [editForm, setEditForm] = useState({ name: '', category: '', manufacturer: '', description: '' })
   const [batchForm, setBatchForm] = useState({ batchNumber: '', expiryDate: '', quantity: '' })
+  const [error, setError] = useState('')
+  const productForm = useZodForm(productSchema)
 
   useEffect(() => { fetchProducts() }, [])
 
@@ -55,6 +63,10 @@ export default function ProductsPage() {
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
+    if (!productForm.validate(form)) {
+      return
+    }
     try {
       const res = await fetch('/api/products', {
         method: 'POST',
@@ -65,9 +77,54 @@ export default function ProductsPage() {
         setShowForm(false)
         setForm({ name: '', category: 'NEUROMODULATOR', manufacturer: '', description: '' })
         fetchProducts()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to create product')
       }
-    } catch (error) {
-      console.error('Error creating product:', error)
+    } catch {
+      setError('Failed to create product')
+    }
+  }
+
+  const handleEdit = (product: Product) => {
+    setEditingProduct(product)
+    setEditForm({
+      name: product.name,
+      category: product.category,
+      manufacturer: product.manufacturer || '',
+      description: product.description || '',
+    })
+  }
+
+  const handleUpdate = async () => {
+    setError('')
+    try {
+      const res = await fetch('/api/products', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingProduct?.id, ...editForm }),
+      })
+      if (res.ok) {
+        setEditingProduct(null)
+        fetchProducts()
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to update product')
+      }
+    } catch {
+      setError('Failed to update product')
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this product?')) return
+    setError('')
+    try {
+      const res = await fetch(`/api/products?id=${id}`, { method: 'DELETE' })
+      if (res.ok) fetchProducts()
+      else setError('Failed to delete product')
+    } catch {
+      setError('Failed to delete product')
     }
   }
 
@@ -88,6 +145,12 @@ export default function ProductsPage() {
         <Button onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : '+ Add Product'}</Button>
       </div>
 
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
+          {error}
+        </div>
+      )}
+
       {showForm && (
         <Card>
           <CardHeader><CardTitle>New Product</CardTitle></CardHeader>
@@ -96,7 +159,8 @@ export default function ProductsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Product Name *</label>
-                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="e.g., Botox 100u" />
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="e.g., Botox 100u" maxLength={100} />
+                  <FieldError error={productForm.getFieldError('name')} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Category *</label>
@@ -108,15 +172,50 @@ export default function ProductsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Manufacturer</label>
-                  <Input value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} placeholder="e.g., Allergan" />
+                  <Input value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} placeholder="e.g., Allergan" maxLength={100} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Description</label>
-                  <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Product description" />
+                  <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Product description" maxLength={500} />
                 </div>
               </div>
               <Button type="submit">Create Product</Button>
             </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Edit Product Modal */}
+      {editingProduct && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Edit Product</CardTitle>
+              <Button size="sm" variant="outline" onClick={() => setEditingProduct(null)}>Cancel</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Product Name</label>
+                <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Category</label>
+                <Select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Manufacturer</label>
+                <Input value={editForm.manufacturer} onChange={(e) => setEditForm({ ...editForm, manufacturer: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Description</label>
+                <Input value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+              </div>
+            </div>
+            <Button onClick={handleUpdate}>Save Changes</Button>
           </CardContent>
         </Card>
       )}
@@ -136,11 +235,16 @@ export default function ProductsPage() {
                     <div>
                       <h3 className="font-medium">{product.name}</h3>
                       <p className="text-sm text-muted-foreground">{product.category.replace(/_/g, ' ')} {product.manufacturer && `• ${product.manufacturer}`}</p>
+                      {product.description && <p className="text-sm text-muted-foreground mt-1">{product.description}</p>}
                       <p className="text-sm text-muted-foreground">Used in {product._count.treatments} treatments</p>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => setShowBatchForm(showBatchForm === product.id ? null : product.id)}>
-                      {showBatchForm === product.id ? 'Close' : '+ Batch'}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleEdit(product)}>Edit</Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(product.id)}>Delete</Button>
+                      <Button size="sm" variant="outline" onClick={() => setShowBatchForm(showBatchForm === product.id ? null : product.id)}>
+                        {showBatchForm === product.id ? 'Close' : '+ Batch'}
+                      </Button>
+                    </div>
                   </div>
 
                   {product.batches.length > 0 && (

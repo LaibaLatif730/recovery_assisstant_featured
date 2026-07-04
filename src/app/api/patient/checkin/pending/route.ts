@@ -10,6 +10,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Patient ID is required' }, { status: 400 })
     }
 
+    // Verify patientId is a valid cuid format
+    if (!/^c[a-z0-9]{24,}$/.test(patientId)) {
+      return NextResponse.json({ error: 'Invalid patient ID format' }, { status: 400 })
+    }
+
     const checkIn = await prisma.recoveryCheckIn.findFirst({
       where: {
         patientId,

@@ -1,58 +1,49 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
-
-interface Patient {
-  id: string
-  firstName: string
-  lastName: string
-}
+import { FieldError } from '@/components/FieldError'
+import { appointmentSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 export default function NewAppointmentPage() {
   const router = useRouter()
-  const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState({
-    patientId: '',
+    patientName: '',
     type: 'CONSULTATION',
     appointmentDate: '',
     duration: '30',
     notes: '',
   })
-
-  useEffect(() => {
-    fetchPatients()
-  }, [])
-
-  const fetchPatients = async () => {
-    try {
-      const res = await fetch('/api/patients')
-      const data = await res.json()
-      setPatients(Array.isArray(data) ? data : [])
-    } catch (error) {
-      console.error('Error fetching patients:', error)
-    }
-  }
+  const { validate, getFieldError } = useZodForm(appointmentSchema)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
+    if (!validate({ ...form, duration: parseInt(form.duration) })) {
+      setLoading(false)
+      return
+    }
+
     try {
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
+          patientName: form.patientName,
           duration: parseInt(form.duration),
+          type: form.type,
+          appointmentDate: form.appointmentDate,
+          notes: form.notes || undefined,
         }),
       })
 
@@ -88,19 +79,17 @@ export default function NewAppointmentPage() {
             )}
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Patient *</label>
-              <Select
-                value={form.patientId}
-                onChange={(e) => setForm({ ...form, patientId: e.target.value })}
+              <label className="text-sm font-medium">Patient Name *</label>
+              <Input
+                type="text"
+                placeholder="e.g. John Smith"
+                value={form.patientName}
+                onChange={(e) => setForm({ ...form, patientName: e.target.value })}
+                maxLength={200}
                 required
-              >
-                <option value="">Select a patient</option>
-                {patients.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.firstName} {p.lastName}
-                  </option>
-                ))}
-              </Select>
+              />
+              <p className="text-xs text-muted-foreground">Type the full name of an existing registered patient</p>
+              <FieldError error={getFieldError('patientName')} />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -117,6 +106,7 @@ export default function NewAppointmentPage() {
                   <option value="REVIEW">Review</option>
                   <option value="OTHER">Other</option>
                 </Select>
+                <FieldError error={getFieldError('type')} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Duration (minutes) *</label>
@@ -132,6 +122,7 @@ export default function NewAppointmentPage() {
                   <option value="90">1.5 hours</option>
                   <option value="120">2 hours</option>
                 </Select>
+                <FieldError error={getFieldError('duration')} />
               </div>
             </div>
 
@@ -141,8 +132,10 @@ export default function NewAppointmentPage() {
                 type="datetime-local"
                 value={form.appointmentDate}
                 onChange={(e) => setForm({ ...form, appointmentDate: e.target.value })}
+                min={new Date().toISOString().slice(0, 16)}
                 required
               />
+              <FieldError error={getFieldError('appointmentDate')} />
             </div>
 
             <div className="space-y-2">
@@ -152,7 +145,9 @@ export default function NewAppointmentPage() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 placeholder="Additional notes..."
                 rows={3}
+                maxLength={1000}
               />
+              <FieldError error={getFieldError('notes')} />
             </div>
 
             <div className="flex gap-4 pt-4">

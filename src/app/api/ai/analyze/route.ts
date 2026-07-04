@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { requireAuth } from '@/lib/api-auth'
 
 async function analyzeImage(photoUrl: string) {
   const scores = {
@@ -33,6 +34,11 @@ async function analyzeImage(photoUrl: string) {
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { photoId, checkInId } = await req.json()
 
     if (!photoId) {

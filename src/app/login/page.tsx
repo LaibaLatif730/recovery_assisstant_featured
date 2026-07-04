@@ -6,6 +6,9 @@ import { signIn } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
+import { FieldError } from '@/components/FieldError'
+import { loginSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 function LoginForm() {
   const router = useRouter()
@@ -15,28 +18,37 @@ function LoginForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const { validate, getFieldError } = useZodForm(loginSchema)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
+    if (!validate({ email, password })) {
+      setLoading(false)
+      return
+    }
+
+    const callbackUrl = searchParams.get('callbackUrl')
+    const destination = callbackUrl ? decodeURIComponent(callbackUrl) : '/dashboard'
+
     try {
       const result = await signIn('credentials', {
         email,
         password,
         redirect: false,
+        callbackUrl: destination,
       })
 
       if (result?.error) {
         setError('Invalid email or password')
+        setLoading(false)
       } else {
-        router.push('/dashboard')
-        router.refresh()
+        window.location.href = result?.url || destination
       }
     } catch {
       setError('An error occurred. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -99,10 +111,16 @@ function LoginForm() {
               required
             />
           </div>
+          <FieldError error={getFieldError('email')} />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-white/80 block">Password</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-white/80 block">Password</label>
+            <Link href="/login/forgot-password" className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+              Forgot password?
+            </Link>
+          </div>
           <div className="relative">
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -118,6 +136,7 @@ function LoginForm() {
               required
             />
           </div>
+          <FieldError error={getFieldError('password')} />
         </div>
 
         <Button

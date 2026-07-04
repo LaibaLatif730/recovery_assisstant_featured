@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET() {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const protocols = await prisma.treatmentProtocol.findMany({
       where: { isActive: true },
       orderBy: { procedureType: 'asc' },
@@ -17,6 +23,15 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (session.user.role !== 'ADMIN' && session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Forbidden: Admin or Doctor access required' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { id, ...updateData } = body
 

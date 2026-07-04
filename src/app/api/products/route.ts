@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { productSchema, productBatchSchema } from '@/lib/validators'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(req.url)
     const category = searchParams.get('category')
     const clinicId = searchParams.get('clinicId')
@@ -33,6 +39,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const validatedData = productSchema.parse(body)
 
@@ -42,7 +53,7 @@ export async function POST(req: Request) {
         category: validatedData.category,
         manufacturer: validatedData.manufacturer,
         description: validatedData.description,
-        clinicId: validatedData.clinicId,
+        clinicId: validatedData.clinicId || undefined,
       },
     })
 
@@ -55,6 +66,11 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const { id, ...updateData } = body
 
@@ -62,14 +78,62 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Product ID is required' }, { status: 400 })
     }
 
+    const allowedFields: Record<string, any> = {}
+    if (updateData.name) allowedFields.name = updateData.name
+    if (updateData.category) allowedFields.category = updateData.category
+    if (updateData.manufacturer !== undefined) allowedFields.manufacturer = updateData.manufacturer
+    if (updateData.description !== undefined) allowedFields.description = updateData.description
+    if (updateData.isActive !== undefined) allowedFields.isActive = updateData.isActive
+
+    if (updateData.batch) {
+      const batch = updateData.batch
+      if (batch.batchNumber && batch.expiryDate) {
+        await prisma.productBatch.create({
+          data: {
+            productId: id,
+            batchNumber: batch.batchNumber,
+            expiryDate: new Date(batch.expiryDate),
+            quantity: batch.quantity ? parseInt(batch.quantity) : undefined,
+          },
+        })
+      }
+      return NextResponse.json({ success: true })
+    }
+
     const product = await prisma.product.update({
       where: { id },
-      data: updateData,
+      data: allowedFields,
     })
 
     return NextResponse.json(product)
   } catch (error) {
     console.error('Error updating product:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'Product ID is required' }, { status: 400 })
+    }
+
+    await prisma.product.update({
+      where: { id },
+      data: { isActive: false },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting product:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
+import { FieldError } from '@/components/FieldError'
+import { treatmentSchema } from '@/lib/validators'
+import { useZodForm } from '@/hooks/useZodForm'
 
 interface Patient {
   id: string
@@ -29,6 +32,7 @@ export default function NewTreatmentPage() {
     notes: '',
     aftercareNotes: '',
   })
+  const { validate, getFieldError } = useZodForm(treatmentSchema)
 
   useEffect(() => {
     fetchPatients()
@@ -48,6 +52,11 @@ export default function NewTreatmentPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+
+    if (!validate({ ...form, units: form.units ? parseFloat(form.units) : undefined })) {
+      setLoading(false)
+      return
+    }
 
     try {
       const res = await fetch('/api/treatments', {
@@ -81,6 +90,10 @@ export default function NewTreatmentPage() {
     { value: 'FILLER_POLYMETHYLMETHACRYLATE', label: 'PMMA Filler' },
     { value: 'MESOTHERAPY', label: 'Mesotherapy' },
     { value: 'PRP', label: 'PRP (Platelet-Rich Plasma)' },
+    { value: 'SKIN_BOOSTER', label: 'Skin Booster' },
+    { value: 'MICRONEEDLING', label: 'Microneedling' },
+    { value: 'PDO_THREADS', label: 'PDO Threads' },
+    { value: 'FAT_DISSOLVING', label: 'Fat Dissolving' },
     { value: 'OTHER', label: 'Other' },
   ]
 
@@ -116,6 +129,7 @@ export default function NewTreatmentPage() {
                   </option>
                 ))}
               </Select>
+              <FieldError error={getFieldError('patientId')} />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -130,6 +144,7 @@ export default function NewTreatmentPage() {
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </Select>
+                <FieldError error={getFieldError('type')} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Treatment Date *</label>
@@ -137,8 +152,10 @@ export default function NewTreatmentPage() {
                   type="date"
                   value={form.treatmentDate}
                   onChange={(e) => setForm({ ...form, treatmentDate: e.target.value })}
+                  min={new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
                   required
                 />
+                <FieldError error={getFieldError('treatmentDate')} />
               </div>
             </div>
 
@@ -149,7 +166,9 @@ export default function NewTreatmentPage() {
                   value={form.productName}
                   onChange={(e) => setForm({ ...form, productName: e.target.value })}
                   placeholder="e.g., Botox, Juvederm"
+                  maxLength={100}
                 />
+                <FieldError error={getFieldError('productName')} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Units</label>
@@ -160,6 +179,7 @@ export default function NewTreatmentPage() {
                   onChange={(e) => setForm({ ...form, units: e.target.value })}
                   placeholder="Number of units"
                 />
+                <FieldError error={getFieldError('units')} />
               </div>
             </div>
 
@@ -169,7 +189,9 @@ export default function NewTreatmentPage() {
                 value={form.injectionAreas}
                 onChange={(e) => setForm({ ...form, injectionAreas: e.target.value })}
                 placeholder="e.g., Forehead, Crow's feet, Glabella"
+                maxLength={200}
               />
+              <FieldError error={getFieldError('injectionAreas')} />
             </div>
 
             <div className="space-y-2">
@@ -179,7 +201,9 @@ export default function NewTreatmentPage() {
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 placeholder="Additional notes about the treatment..."
                 rows={3}
+                maxLength={1000}
               />
+              <FieldError error={getFieldError('notes')} />
             </div>
 
             <div className="space-y-2">
@@ -189,7 +213,9 @@ export default function NewTreatmentPage() {
                 onChange={(e) => setForm({ ...form, aftercareNotes: e.target.value })}
                 placeholder="Specific aftercare instructions for this patient..."
                 rows={3}
+                maxLength={1000}
               />
+              <FieldError error={getFieldError('aftercareNotes')} />
             </div>
 
             <div className="flex gap-4 pt-4">
