@@ -1,8 +1,7 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 export async function sendPasswordResetEmail(email: string, resetToken: string) {
+  const resend = new Resend(process.env.RESEND_API_KEY || 're_placeholder')
   const resetUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/login/reset-password?token=${resetToken}`
 
   try {
