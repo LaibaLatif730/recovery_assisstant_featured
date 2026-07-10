@@ -152,13 +152,11 @@ export default function AppointmentsPage() {
           </Button>
         </Link>
       </div>
-
       {error && (
         <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
           {error}
         </div>
       )}
-
       {/* Edit Appointment Modal */}
       {editingAppointment && (
         <Card className="border-yellow-500/30 bg-yellow-500/5">
@@ -203,7 +201,6 @@ export default function AppointmentsPage() {
           </CardContent>
         </Card>
       )}
-
       <Card>
         <CardHeader>
           <div className="flex gap-2">

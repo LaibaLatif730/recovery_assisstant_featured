@@ -77,6 +77,7 @@ export default function PatientDashboard() {
         allCheckIns.push({ ...ci, treatmentType: t.type })
       })
     })
+    
     return allCheckIns
       .filter((ci) => ci.status === 'PENDING' || ci.status === 'SENT')
       .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())

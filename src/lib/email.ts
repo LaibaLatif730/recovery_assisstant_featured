@@ -2,7 +2,10 @@ import { Resend } from 'resend'
 
 export async function sendPasswordResetEmail(email: string, resetToken: string) {
   const resend = new Resend(process.env.RESEND_API_KEY || 're_placeholder')
-  const resetUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/login/reset-password?token=${resetToken}`
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000'
+  const resetUrl = `${baseUrl}/login/reset-password?token=${resetToken}`
 
   try {
     await resend.emails.send({

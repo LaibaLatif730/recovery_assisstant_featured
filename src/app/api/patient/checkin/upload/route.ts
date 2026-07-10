@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { put } from '@vercel/blob'
-import { analyzeWithGrok } from '@/lib/grok'
+import { analyzeWithGrok, compareWithPreviousAnalysis } from '@/lib/grok'
 import { resizeImage } from '@/lib/image-utils'
 
 export async function POST(req: Request) {
@@ -19,12 +19,10 @@ export async function POST(req: Request) {
       )
     }
 
-    // Verify IDs are valid cuid format
     if (!/^c[a-z0-9]{24,}$/.test(checkInId) || !/^c[a-z0-9]{24,}$/.test(patientId)) {
       return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 })
     }
 
-    // Verify the check-in belongs to this patient
     const checkIn = await prisma.recoveryCheckIn.findUnique({
       where: { id: checkInId },
       include: { treatment: { select: { type: true } } },
@@ -34,7 +32,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Check-in not found or does not belong to this patient' }, { status: 404 })
     }
 
-    // Verify patient exists and is active
     const patient = await prisma.patient.findUnique({
       where: { id: patientId, isActive: true },
     })
@@ -55,12 +52,33 @@ export async function POST(req: Request) {
 
     const base64Image = await resizeImage(buffer, file.type)
 
+    const previousAnalysis = await prisma.aIAnalysis.findFirst({
+      where: { checkInId },
+      orderBy: { analysisDate: 'desc' },
+      select: {
+        swellingScore: true,
+        bruisingScore: true,
+        rednessScore: true,
+        asymmetryScore: true,
+      },
+    })
+
     const grokResult = await analyzeWithGrok(
       base64Image,
       file.type,
       checkIn?.treatment?.type,
       checkIn?.dayNumber
     )
+
+    let trendData = null
+    if (previousAnalysis) {
+      trendData = compareWithPreviousAnalysis(grokResult.clinicalFeatures, {
+        edema: previousAnalysis.swellingScore,
+        ecchymosis: previousAnalysis.bruisingScore,
+        erythema: previousAnalysis.rednessScore,
+        asymmetry: previousAnalysis.asymmetryScore,
+      })
+    }
 
     const features = grokResult.clinicalFeatures
 
@@ -69,6 +87,7 @@ export async function POST(req: Request) {
         patientId,
         checkInId,
         imageUrl: imageUrl,
+        source: 'PORTAL',
         metadata: JSON.stringify({
           originalName: file.name,
           size: file.size,
@@ -98,6 +117,10 @@ export async function POST(req: Request) {
         clinicalSummary: grokResult.clinicalSummary,
         recommendedAction: grokResult.recommendedAction,
         rawResponse: JSON.stringify({ grokResult }),
+        rationale: grokResult.rationale,
+        confidenceFactors: JSON.stringify(grokResult.confidenceFactors),
+        trendDirection: trendData?.trendDirection || null,
+        trendDetails: trendData ? JSON.stringify(trendData.trendDetails) : null,
       },
     })
 
@@ -158,6 +181,10 @@ export async function POST(req: Request) {
       aiResponse: grokResult.aiResponse,
       clinicalSummary: grokResult.clinicalSummary,
       recommendedAction: grokResult.recommendedAction,
+      rationale: grokResult.rationale,
+      confidenceFactors: grokResult.confidenceFactors,
+      trendDirection: trendData?.trendDirection || null,
+      trendDetails: trendData?.trendDetails || null,
       nextCheckIn,
       shouldEscalate,
       visionLabels: grokResult.labels,

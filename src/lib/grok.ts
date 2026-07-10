@@ -26,9 +26,14 @@ export interface GrokAnalysis {
     vascularity: number
   }
   labels: string[]
+  rationale: string
+  confidenceFactors: { factor: string; weight: number; impact: string }[]
+  trendDirection?: 'IMPROVING' | 'STABLE' | 'WORSENING'
+  trendDetails?: { metric: string; previousScore: number; currentScore: number; changePercent: number }[]
 }
 
-const CLINICAL_PROMPT = `You are an AI clinical decision support system analyzing a post-treatment recovery photo for an aesthetic medicine patient.
+function getTreatmentSpecificPrompt(treatmentType: string, dayNumber: number): string {
+  const base = `You are an AI clinical decision support system analyzing a post-treatment recovery photo for an aesthetic medicine patient.
 
 Analyze this image and provide a comprehensive clinical assessment.
 
@@ -51,11 +56,45 @@ RISK CLASSIFICATION:
 - GREEN: Normal recovery trajectory. No concerns.
 - YELLOW: Deviation from expected recovery. Clinician review within 24 hours.
 - ORANGE: Significant clinical concern. Priority review within 4 hours.
-- RED: Possible vascular occlusion, skin necrosis. Immediate contact required.
+- RED: Possible vascular occlusion, skin necrosis. Immediate contact required.`
 
-Return ONLY valid JSON with this structure:
+  const fillerSpecific = `
+ADDITIONAL FILLER-SPECIFIC RED FLAGS:
+- Blanching or white discoloration of skin (vascular occlusion indicator)
+- Severe pain disproportionate to procedure
+- Skin color changes (dark purple/black)
+- Visual changes or complaints
+- Asymmetry worsening after Day 7
+- Lumps persisting beyond expected timeline
+- If ANY of these are present, classify as RED.`
+
+  const botoxSpecific = `
+ADDITIONAL BOTOX-SPECIFIC RED FLAGS:
+- Brow ptosis (drooping eyebrow)
+- Eyelid ptosis (drooping eyelid)
+- Difficulty swallowing or speaking
+- Muscle weakness spreading beyond treatment area
+- Systemic weakness or difficulty breathing
+- If swallowing/breathing difficulties are present, classify as RED.`
+
+  let specificGuidance = ''
+  if (treatmentType?.includes('FILLER')) {
+    specificGuidance = fillerSpecific
+  } else if (treatmentType === 'BOTOX') {
+    specificGuidance = botoxSpecific
+  }
+
+  const timelineContext = `
+POST-PROCEDURE TIMELINE CONTEXT (Day ${dayNumber}):
+- Day 1-2: Peak swelling and bruising expected. Mild asymmetry is normal.
+- Day 3-5: Swelling subsiding. Bruising shifting color. Improvement expected.
+- Day 7-14: Near-final result. Residual firmness may persist.
+- Day 14+: Final result achieved. All swelling should be resolved.`
+
+  return base + specificGuidance + timelineContext + `
+RETURN ONLY valid JSON with this structure:
 {
-  "riskLevel": "GREEN" or "YELLOW" or "ORANGE" or "RED",
+  "riskLevel": "GREEN" | "YELLOW" | "ORANGE" | "RED",
   "clinicalFeatures": {
     "edema": 0.0-1.0,
     "ecchymosis": 0.0-1.0,
@@ -66,8 +105,8 @@ Return ONLY valid JSON with this structure:
   },
   "findings": [
     {
-      "type": "edema",
-      "severity": "none/mild/moderate/severe",
+      "type": "feature_type",
+      "severity": "none|mild|moderate|severe",
       "score": 0.0-1.0,
       "description": "Clinical description",
       "clinicalSignificance": "What this means clinically"
@@ -76,7 +115,11 @@ Return ONLY valid JSON with this structure:
   "recommendations": ["Clinical recommendation 1", "Clinical recommendation 2"],
   "clinicalSummary": "Professional clinical summary for the treating clinician",
   "recommendedAction": "Specific clinical action required",
-  "labels": ["detected_feature_1", "detected_feature_2"]
+  "labels": ["detected_feature_1", "detected_feature_2"],
+  "rationale": "Structured explanation of WHY this risk level was assigned. Be specific: 'Bruising area increased ~18% versus expected timeline; mild asymmetry detected near the injection site consistent with normal Day ${dayNumber} recovery pattern' or 'Blanching of skin detected near nasolabial fold, suspicious for vascular compromise — immediate intervention required'.",
+  "confidenceFactors": [
+    {"factor": "feature_name", "weight": 0.0-1.0, "impact": "positive|negative|neutral"}
+  ]
 }
 
 Rules:
@@ -86,7 +129,10 @@ Rules:
 - If vascular compromise is suspected, ALWAYS rate as RED
 - Consider the post-procedure timeline when assessing
 - Document findings objectively
-- Do not diagnose, assess recovery status and flag concerns`
+- Do not diagnose, assess recovery status and flag concerns
+- The rationale MUST explain the reasoning behind the risk classification in clinical terms
+- confidenceFactors should list the top 3-5 factors that influenced the classification`
+}
 
 export async function analyzeWithGrok(
   imageBase64: string,
@@ -96,11 +142,7 @@ export async function analyzeWithGrok(
 ): Promise<GrokAnalysis> {
   const apiKey = process.env.GROK_API_KEY
 
-  const contextInfo = treatmentType && dayNumber
-    ? `\nContext: Patient is Day ${dayNumber} post-${treatmentType.replace(/_/g, ' ')}.`
-    : ''
-
-  const prompt = CLINICAL_PROMPT + contextInfo
+  const prompt = getTreatmentSpecificPrompt(treatmentType || 'OTHER', dayNumber || 1)
 
   if (!apiKey) {
     console.log('No GROK_API_KEY set, using fallback clinical analysis')
@@ -131,7 +173,7 @@ export async function analyzeWithGrok(
             ],
           },
         ],
-        max_tokens: 1500,
+        max_tokens: 2000,
         temperature: 0.2,
       }),
     })
@@ -177,6 +219,8 @@ export async function analyzeWithGrok(
         recommendedAction: parsed.recommendedAction || '',
         clinicalFeatures: features,
         labels: parsed.labels || [],
+        rationale: parsed.rationale || generateDefaultRationale(features, riskClassification.level, treatmentType, dayNumber),
+        confidenceFactors: parsed.confidenceFactors || [],
       }
     }
 
@@ -185,6 +229,22 @@ export async function analyzeWithGrok(
     console.error('Groq clinical analysis error:', error)
     return fallbackClinicalAnalysis(treatmentType, dayNumber)
   }
+}
+
+function generateDefaultRationale(
+  features: { edema: number; ecchymosis: number; erythema: number; asymmetry: number; nodules: number; vascularity: number },
+  riskLevel: ClinicalRiskLevel,
+  treatmentType?: string,
+  dayNumber?: number
+): string {
+  const maxFeature = Math.max(features.edema, features.ecchymosis, features.erythema, features.asymmetry)
+  const maxFeatureName = features.edema === maxFeature ? 'edema' :
+    features.ecchymosis === maxFeature ? 'ecchymosis' :
+    features.erythema === maxFeature ? 'erythema' : 'asymmetry'
+
+  const severityLabel = maxFeature > 0.7 ? 'significant' : maxFeature > 0.4 ? 'moderate' : maxFeature > 0.2 ? 'mild' : 'minimal'
+
+  return `${severityLabel} ${maxFeatureName} detected (score: ${maxFeature.toFixed(2)}) in Day ${dayNumber || '?'} post-${(treatmentType || 'unknown').replace(/_/g, ' ').toLowerCase()} recovery photo. Classification: ${riskLevel}. ${riskLevel === 'RED' ? 'Vascular compromise indicators present — immediate contact required.' : riskLevel === 'ORANGE' ? 'Clinical concern exceeds expected recovery parameters — priority review needed.' : riskLevel === 'YELLOW' ? 'Findings deviate from typical recovery trajectory — clinician review recommended.' : 'Findings consistent with normal recovery timeline.'}`
 }
 
 function fallbackClinicalAnalysis(
@@ -224,7 +284,44 @@ function fallbackClinicalAnalysis(
     recommendedAction: 'No intervention required. Continue scheduled monitoring.',
     clinicalFeatures: features,
     labels: ['normal_recovery'],
+    rationale: `Mild edema and ecchymosis detected within expected range for Day ${dayNumber || 1} post-${(treatmentType || 'unknown').replace(/_/g, ' ').toLowerCase()}. Classification: GREEN. Findings consistent with normal recovery trajectory.`,
+    confidenceFactors: [
+      { factor: 'edema_level', weight: 0.3, impact: 'neutral' },
+      { factor: 'ecchymosis_level', weight: 0.25, impact: 'neutral' },
+      { factor: 'timeline_match', weight: 0.25, impact: 'positive' },
+      { factor: 'vascular_indicators', weight: 0.2, impact: 'positive' },
+    ],
   }
+}
+
+export function compareWithPreviousAnalysis(
+  currentFeatures: GrokAnalysis['clinicalFeatures'],
+  previousFeatures: { edema: number; ecchymosis: number; erythema: number; asymmetry: number } | null
+): { trendDirection: 'IMPROVING' | 'STABLE' | 'WORSENING'; trendDetails: { metric: string; previousScore: number; currentScore: number; changePercent: number }[] } | null {
+  if (!previousFeatures) return null
+
+  const metrics = ['edema', 'ecchymosis', 'erythema', 'asymmetry'] as const
+  const details: { metric: string; previousScore: number; currentScore: number; changePercent: number }[] = []
+  let totalChange = 0
+
+  for (const metric of metrics) {
+    const prev = previousFeatures[metric]
+    const curr = currentFeatures[metric]
+    const changePercent = prev > 0 ? ((curr - prev) / prev) * 100 : curr > 0 ? 100 : 0
+    details.push({
+      metric,
+      previousScore: Math.round(prev * 100) / 100,
+      currentScore: Math.round(curr * 100) / 100,
+      changePercent: Math.round(changePercent * 10) / 10,
+    })
+    totalChange += curr - prev
+  }
+
+  let trendDirection: 'IMPROVING' | 'STABLE' | 'WORSENING' = 'STABLE'
+  if (totalChange < -0.1) trendDirection = 'IMPROVING'
+  else if (totalChange > 0.1) trendDirection = 'WORSENING'
+
+  return { trendDirection, trendDetails: details }
 }
 
 export function generateClinicalDocument(
@@ -238,6 +335,7 @@ export function generateClinicalDocument(
     riskLevel: string
     recommendations: string[]
     clinicalSummary: string
+    rationale?: string
   }
 ): string {
   const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -257,6 +355,7 @@ OBJECTIVE:
 - Clinical Photography: Day ${data.dayNumber} post-procedure
 - AI Clinical Assessment: ${data.riskLevel}
 ${data.findings.map(f => `- ${f.type}: ${f.severity} (score: ${f.score})`).join('\n')}
+${data.rationale ? `\nAI Rationale: ${data.rationale}` : ''}
 
 ASSESSMENT:
 - Day ${data.dayNumber} post-${data.treatmentType.replace(/_/g, ' ').toLowerCase()}
@@ -277,6 +376,7 @@ Follow-up Assessment:
 - Day ${data.dayNumber} post-procedure
 - AI Assessment: ${data.riskLevel}
 ${data.findings.map(f => `- ${f.type}: ${f.severity}`).join('\n')}
+${data.rationale ? `\nRationale: ${data.rationale}` : ''}
 
 Recommendations:
 ${data.recommendations.map(r => `- ${r}`).join('\n')}`
@@ -293,6 +393,7 @@ Recovery Status: ${data.riskLevel}
 Clinical Findings:
 ${data.findings.map(f => `- ${f.type}: ${f.severity} — ${f.description}`).join('\n')}
 
+${data.rationale ? `Clinical Rationale:\n${data.rationale}\n` : ''}
 Summary: ${data.clinicalSummary}
 
 Recommendations:

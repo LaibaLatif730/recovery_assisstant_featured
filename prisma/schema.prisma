@@ -114,6 +114,7 @@ model Patient {
   consentRecords  ConsentRecord[]
   complications   ComplicationRecord[]
   clinicalNotes   ClinicalNote[]
+  silenceRiskLogs SilenceRiskLog[]
 
   @@index([email])
   @@index([phone])
@@ -272,6 +273,7 @@ model RecoveryCheckIn {
   photos          PatientPhoto[]
   aiAnalyses      AIAnalysis[]
   doctorNotes     DoctorNote[]
+  silenceRiskLogs SilenceRiskLog[]
 
   @@index([treatmentId])
   @@index([patientId])
@@ -294,12 +296,15 @@ model PatientPhoto {
   qualityScore    Float?
   metadata        String?
   timepoint       String?
+  source          String   @default("PORTAL") // PORTAL, WHATSAPP, CLINIC
+  whatsappMessageId String?
   createdAt       DateTime @default(now())
 
   aiAnalyses      AIAnalysis[]
 
   @@index([patientId])
   @@index([checkInId])
+  @@index([source])
 }
 
 // ─── AI Analysis ──────────────────────────────────────────────
@@ -330,6 +335,12 @@ model AIAnalysis {
   doctorOverride  Boolean  @default(false)
   doctorNotes     String?
   overrideRiskLevel String?
+  // Feature 2: Photo-Based Symptom Trend Tracking
+  trendDirection  String?  // IMPROVING, STABLE, WORSENING
+  trendDetails    String?  // JSON: {metric, previousScore, currentScore, changePercent}
+  // Feature 4: AI Explainability
+  rationale       String?  // Structured clinical rationale for the classification
+  confidenceFactors String? // JSON: [{factor, weight, impact}]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -542,4 +553,29 @@ model AuditLog {
   @@index([userId])
   @@index([entity])
   @@index([createdAt])
+}
+
+// ─── Silence Risk Log (Feature 1) ────────────────────────────
+
+model SilenceRiskLog {
+  id              String   @id @default(cuid())
+  checkInId       String
+  checkIn         RecoveryCheckIn @relation(fields: [checkInId], references: [id])
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id])
+  treatmentType   String
+  missedDayNumber Int
+  scheduledDate   DateTime
+  detectedAt      DateTime @default(now())
+  riskScore       Float    @default(0) // Weighted risk: higher = more urgent
+  escalationLevel String   @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  resolutionNotes String?
+  createdAt       DateTime @default(now())
+
+  @@index([checkInId])
+  @@index([patientId])
+  @@index([escalationLevel])
+  @@index([detectedAt])
 }

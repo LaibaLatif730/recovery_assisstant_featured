@@ -106,6 +106,7 @@ export default function NewAppointmentPage() {
                   <option value="REVIEW">Review</option>
                   <option value="OTHER">Other</option>
                 </Select>
+                
                 <FieldError error={getFieldError('type')} />
               </div>
               <div className="space-y-2">

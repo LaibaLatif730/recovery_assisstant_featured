@@ -92,26 +92,33 @@ export function classifyRiskLevel(scores: {
   asymmetry: number
   nodules?: number
   vascularity?: number
+  treatmentType?: string
+  dayNumber?: number
 }): RiskClassification {
-  const { swelling, bruising, redness, asymmetry, nodules = 0, vascularity = 0 } = scores
+  const { swelling, bruising, redness, asymmetry, nodules = 0, vascularity = 0, treatmentType, dayNumber } = scores
 
-  // RED: Vascular compromise indicators
   if (vascularity > 0.7 || swelling > 0.8) {
     return RISK_LEVELS.RED
   }
 
-  // ORANGE: Significant clinical concern
+  if (treatmentType?.includes('FILLER') && dayNumber && dayNumber > 3) {
+    if (asymmetry > 0.5) return RISK_LEVELS.ORANGE
+    if (swelling > 0.6) return RISK_LEVELS.ORANGE
+  }
+
+  if (treatmentType === 'BOTOX' && dayNumber && dayNumber > 7) {
+    if (asymmetry > 0.4) return RISK_LEVELS.YELLOW
+  }
+
   const maxScore = Math.max(swelling, bruising, redness, asymmetry, nodules)
   if (maxScore > 0.7 || (swelling > 0.5 && asymmetry > 0.5)) {
     return RISK_LEVELS.ORANGE
   }
 
-  // YELLOW: Deviation from expected recovery
   if (maxScore > 0.4 || (swelling > 0.3 && bruising > 0.3)) {
     return RISK_LEVELS.YELLOW
   }
 
-  // GREEN: Normal recovery
   return RISK_LEVELS.GREEN
 }
 
@@ -254,6 +261,8 @@ export interface TreatmentProtocolData {
   followUpSchedule: { day: number; type: string; purpose: string }[]
   contraindications: string[]
   postProcedureInstructions: string[]
+  redFlagCriteria: { condition: string; riskLevel: string; timeframe: string }[]
+  silenceRiskWeight: number
 }
 
 export const TREATMENT_PROTOCOLS: Record<string, TreatmentProtocolData> = {
@@ -284,6 +293,15 @@ export const TREATMENT_PROTOCOLS: Record<string, TreatmentProtocolData> = {
       'Avoid alcohol for 24 hours',
       'Contact clinic if you experience difficulty swallowing, speaking, or breathing',
     ],
+    redFlagCriteria: [
+      { condition: 'Brow ptosis', riskLevel: 'ORANGE', timeframe: 'Day 0-7' },
+      { condition: 'Eyelid droop', riskLevel: 'ORANGE', timeframe: 'Day 0-7' },
+      { condition: 'Difficulty swallowing', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Voice changes', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Systemic weakness', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Asymmetry beyond Day 7', riskLevel: 'YELLOW', timeframe: 'Day 7+' },
+    ],
+    silenceRiskWeight: 1.0,
   },
   FILLER_HYALURONIC: {
     procedureType: 'FILLER_HYALURONIC',
@@ -317,6 +335,16 @@ export const TREATMENT_PROTOCOLS: Record<string, TreatmentProtocolData> = {
       'Do not massage the area unless instructed',
       'Contact clinic immediately if you experience severe pain, skin color changes, or vision changes',
     ],
+    redFlagCriteria: [
+      { condition: 'Blanching of skin', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Severe pain disproportionate to procedure', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Visual changes or blindness', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Skin necrosis indicators', riskLevel: 'RED', timeframe: 'Hours-Days' },
+      { condition: 'Increasing swelling after Day 3', riskLevel: 'ORANGE', timeframe: 'Day 3+' },
+      { condition: 'Asymmetry worsening after Day 7', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+      { condition: 'Persistent lumps beyond Day 14', riskLevel: 'YELLOW', timeframe: 'Day 14+' },
+    ],
+    silenceRiskWeight: 1.5,
   },
   FILLER_CALCIUM_HYDROXYLAPATITE: {
     procedureType: 'FILLER_CALCIUM_HYDROXYLAPATITE',
@@ -347,6 +375,14 @@ export const TREATMENT_PROTOCOLS: Record<string, TreatmentProtocolData> = {
       'Do not massage unless instructed',
       'Contact clinic for any concerning symptoms',
     ],
+    redFlagCriteria: [
+      { condition: 'Blanching of skin', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Severe pain', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Visual changes', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Nodule formation', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+      { condition: 'Persistent redness', riskLevel: 'YELLOW', timeframe: 'Day 3+' },
+    ],
+    silenceRiskWeight: 1.4,
   },
   SKIN_BOOSTER: {
     procedureType: 'SKIN_BOOSTER',
@@ -373,6 +409,12 @@ export const TREATMENT_PROTOCOLS: Record<string, TreatmentProtocolData> = {
       'Keep skin hydrated',
       'Avoid sun exposure for 48 hours',
     ],
+    redFlagCriteria: [
+      { condition: 'Persistent redness beyond Day 3', riskLevel: 'YELLOW', timeframe: 'Day 3+' },
+      { condition: 'Signs of infection', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+      { condition: 'Nodule formation', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+    ],
+    silenceRiskWeight: 1.0,
   },
   PRP: {
     procedureType: 'PRP',
@@ -399,6 +441,13 @@ export const TREATMENT_PROTOCOLS: Record<string, TreatmentProtocolData> = {
       'Avoid strenuous exercise for 24 hours',
       'Keep area clean and dry for 12 hours',
     ],
+    redFlagCriteria: [
+      { condition: 'Persistent redness beyond Day 3', riskLevel: 'YELLOW', timeframe: 'Day 3+' },
+      { condition: 'Signs of infection', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+      { condition: 'Fever', riskLevel: 'ORANGE', timeframe: 'Day 1+' },
+      { condition: 'Pus formation', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+    ],
+    silenceRiskWeight: 1.0,
   },
   MICRONEEDLING: {
     procedureType: 'MICRONEEDLING',
@@ -427,6 +476,253 @@ export const TREATMENT_PROTOCOLS: Record<string, TreatmentProtocolData> = {
       'Use gentle moisturizer',
       'Avoid strenuous exercise for 24 hours',
     ],
+    redFlagCriteria: [
+      { condition: 'Persistent redness beyond Day 3', riskLevel: 'YELLOW', timeframe: 'Day 3+' },
+      { condition: 'Signs of infection', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+      { condition: 'Scarring', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+      { condition: 'Hyperpigmentation', riskLevel: 'YELLOW', timeframe: 'Day 14+' },
+    ],
+    silenceRiskWeight: 1.0,
+  },
+  FILLER_POLY_L_LACTIC: {
+    procedureType: 'FILLER_POLY_L_LACTIC',
+    category: 'Dermal Filler',
+    substance: 'Poly-L-Lactic Acid (Sculptra)',
+    typicalVolumes: '1.0mL - 2.0mL per session',
+    recoveryTimeline: {
+      day_0_2: 'Swelling and bruising expected.',
+      day_3_7: 'Swelling subsiding. Product integrating.',
+      day_7_14: 'Collagen stimulation beginning.',
+      day_14_30: 'Collagen production increasing. Results improving.',
+    },
+    normalSymptoms: ['Swelling', 'Bruising', 'Tenderness', 'Firmness', 'Mild asymmetry'],
+    warningSigns: ['Nodule formation', 'Persistent redness', 'Skin discoloration'],
+    emergencySigns: ['Blanching', 'Severe pain', 'Visual changes', 'Skin necrosis'],
+    followUpSchedule: [
+      { day: 1, type: 'Photo', purpose: 'Early assessment' },
+      { day: 7, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+      { day: 14, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+      { day: 30, type: 'Photo + Questionnaire', purpose: 'Collagen response' },
+    ],
+    contraindications: ['Active infection', 'Known allergy', 'Pregnancy', 'Autoimmune disease'],
+    postProcedureInstructions: [
+      'Apply ice for 20 minutes every 2 hours for first 24 hours',
+      'Massage the treated area 5 minutes, 5 times a day for 5 days',
+      'Avoid strenuous exercise for 48 hours',
+      'Avoid extreme heat for 48 hours',
+    ],
+    redFlagCriteria: [
+      { condition: 'Blanching of skin', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Severe pain', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Nodule formation', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+      { condition: 'Persistent asymmetry beyond Day 14', riskLevel: 'YELLOW', timeframe: 'Day 14+' },
+    ],
+    silenceRiskWeight: 1.3,
+  },
+  FILLER_POLYALKYLIMIDE: {
+    procedureType: 'FILLER_POLYALKYLIMIDE',
+    category: 'Dermal Filler',
+    substance: 'Polyalkylimide (Bio-Alcamid)',
+    typicalVolumes: '1.0mL - 3.0mL',
+    recoveryTimeline: {
+      day_0_2: 'Mild swelling and bruising.',
+      day_3_7: 'Swelling resolving. Product settling.',
+      day_7_14: 'Near-final result.',
+      day_14_30: 'Final result achieved.',
+    },
+    normalSymptoms: ['Mild swelling', 'Bruising', 'Tenderness', 'Firmness'],
+    warningSigns: ['Persistent redness', 'Nodule formation', 'Migration signs'],
+    emergencySigns: ['Blanching', 'Severe pain', 'Visual changes'],
+    followUpSchedule: [
+      { day: 1, type: 'Photo', purpose: 'Early assessment' },
+      { day: 7, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+      { day: 14, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+    ],
+    contraindications: ['Active infection', 'Known allergy', 'Pregnancy'],
+    postProcedureInstructions: [
+      'Apply ice for first 24 hours',
+      'Avoid strenuous exercise for 48 hours',
+      'Avoid extreme heat for 48 hours',
+      'Contact clinic for any concerning symptoms',
+    ],
+    redFlagCriteria: [
+      { condition: 'Blanching of skin', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Severe pain', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Signs of migration', riskLevel: 'ORANGE', timeframe: 'Weeks-Months' },
+      { condition: 'Nodule formation', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+    ],
+    silenceRiskWeight: 1.3,
+  },
+  FILLER_POLYMETHYLMETHACRYLATE: {
+    procedureType: 'FILLER_POLYMETHYLMETHACRYLATE',
+    category: 'Dermal Filler',
+    substance: 'PMMA (Artefill)',
+    typicalVolumes: '0.5mL - 2.0mL',
+    recoveryTimeline: {
+      day_0_2: 'Swelling and bruising expected.',
+      day_3_7: 'Swelling subsiding.',
+      day_7_14: 'Product integrating.',
+      day_14_30: 'Final result. Collagen stimulation ongoing.',
+    },
+    normalSymptoms: ['Swelling', 'Bruising', 'Tenderness', 'Firmness', 'Mild asymmetry'],
+    warningSigns: ['Nodule formation', 'Persistent redness', 'Granuloma signs'],
+    emergencySigns: ['Blanching', 'Severe pain', 'Visual changes', 'Skin necrosis'],
+    followUpSchedule: [
+      { day: 1, type: 'Photo', purpose: 'Early assessment' },
+      { day: 7, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+      { day: 14, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+      { day: 30, type: 'Photo + Questionnaire', purpose: 'Final result' },
+    ],
+    contraindications: ['Active infection', 'Known allergy', 'Pregnancy', 'Autoimmune disease'],
+    postProcedureInstructions: [
+      'Apply ice for first 24 hours',
+      'Avoid strenuous exercise for 48 hours',
+      'Do not massage unless instructed',
+      'Contact clinic for any concerning symptoms',
+    ],
+    redFlagCriteria: [
+      { condition: 'Blanching of skin', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Severe pain', riskLevel: 'RED', timeframe: 'Immediate' },
+      { condition: 'Granuloma formation', riskLevel: 'ORANGE', timeframe: 'Weeks-Months' },
+      { condition: 'Nodule formation', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+    ],
+    silenceRiskWeight: 1.3,
+  },
+  MESOTHERAPY: {
+    procedureType: 'MESOTHERAPY',
+    category: 'Biostimulator',
+    substance: 'Vitamins, enzymes, hormones, plant extracts',
+    typicalVolumes: '1.0mL - 5.0mL per session',
+    recoveryTimeline: {
+      day_0_1: 'Mild swelling, redness, bruising at injection sites.',
+      day_2_3: 'Swelling resolving. Mild tenderness.',
+      day_5_10: 'Skin improving. Hydration increasing.',
+    },
+    normalSymptoms: ['Mild swelling', 'Bruising', 'Redness', 'Tenderness', 'Small bumps'],
+    warningSigns: ['Persistent redness', 'Signs of infection', 'Allergic reaction'],
+    emergencySigns: ['Severe allergic reaction', 'Signs of infection'],
+    followUpSchedule: [
+      { day: 1, type: 'Photo', purpose: 'Early assessment' },
+      { day: 7, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+      { day: 14, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+    ],
+    contraindications: ['Active infection', 'Known allergy', 'Pregnancy', 'Blood disorders'],
+    postProcedureInstructions: [
+      'Avoid makeup for 12 hours',
+      'Avoid sun exposure for 48 hours',
+      'Avoid strenuous exercise for 24 hours',
+      'Keep skin hydrated',
+    ],
+    redFlagCriteria: [
+      { condition: 'Persistent redness beyond Day 3', riskLevel: 'YELLOW', timeframe: 'Day 3+' },
+      { condition: 'Signs of infection', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+      { condition: 'Allergic reaction', riskLevel: 'ORANGE', timeframe: 'Hours-Days' },
+    ],
+    silenceRiskWeight: 1.0,
+  },
+  PDO_THREADS: {
+    procedureType: 'PDO_THREADS',
+    category: 'Thread Lift',
+    substance: 'Polydioxanone threads',
+    typicalVolumes: 'N/A (threads)',
+    recoveryTimeline: {
+      day_0_2: 'Significant swelling and bruising expected.',
+      day_3_7: 'Swelling subsiding. Bruising fading.',
+      day_7_14: 'Lifting effect becoming visible.',
+      day_14_30: 'Final result. Collagen production increasing.',
+    },
+    normalSymptoms: ['Swelling', 'Bruising', 'Tenderness', 'Tightness', 'Mild asymmetry', 'Dimpling'],
+    warningSigns: ['Thread extrusion', 'Infection signs', 'Persistent asymmetry', 'Skin puckering'],
+    emergencySigns: ['Severe infection', 'Thread migration', 'Skin necrosis'],
+    followUpSchedule: [
+      { day: 1, type: 'Photo', purpose: 'Early assessment' },
+      { day: 3, type: 'Photo', purpose: 'Swelling monitoring' },
+      { day: 7, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+      { day: 14, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+      { day: 30, type: 'Photo + Questionnaire', purpose: 'Final result' },
+    ],
+    contraindications: ['Active infection', 'Known allergy', 'Pregnancy', 'Autoimmune disease'],
+    postProcedureInstructions: [
+      'Avoid extreme facial expressions for 2 weeks',
+      'Avoid sleeping on your side for 1 week',
+      'Avoid strenuous exercise for 2 weeks',
+      'Avoid dental procedures for 2 weeks',
+      'Contact clinic immediately for any concerning symptoms',
+    ],
+    redFlagCriteria: [
+      { condition: 'Thread extrusion', riskLevel: 'ORANGE', timeframe: 'Days-Weeks' },
+      { condition: 'Signs of infection', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+      { condition: 'Severe asymmetry', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+      { condition: 'Skin necrosis', riskLevel: 'RED', timeframe: 'Hours-Days' },
+    ],
+    silenceRiskWeight: 1.4,
+  },
+  FAT_DISSOLVING: {
+    procedureType: 'FAT_DISSOLVING',
+    category: 'Injectable',
+    substance: 'Deoxycholic acid (Kybella)',
+    typicalVolumes: '1.0mL - 2.0mL per session',
+    recoveryTimeline: {
+      day_0_2: 'Significant swelling expected (normal response).',
+      day_3_7: 'Swelling subsiding. Bruising fading.',
+      day_7_14: 'Swelling mostly resolved.',
+      day_14_30: 'Fat reduction becoming visible.',
+    },
+    normalSymptoms: ['Significant swelling', 'Bruising', 'Tenderness', 'Numbness', 'Firmness'],
+    warningSigns: ['Persistent swelling beyond Day 7', 'Signs of infection', 'Skin irregularity'],
+    emergencySigns: ['Severe infection', 'Nerve injury signs', 'Skin necrosis'],
+    followUpSchedule: [
+      { day: 1, type: 'Photo', purpose: 'Early assessment' },
+      { day: 7, type: 'Photo + Questionnaire', purpose: 'Swelling monitoring' },
+      { day: 14, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+      { day: 30, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+    ],
+    contraindications: ['Active infection', 'Known allergy', 'Pregnancy', 'Infection at treatment site'],
+    postProcedureInstructions: [
+      'Apply ice for 20 minutes every 2 hours for first 48 hours',
+      'Avoid strenuous exercise for 1 week',
+      'Avoid extreme heat for 48 hours',
+      'Massage the area gently 3 times a day for 1 week',
+      'Swelling is normal and expected for 5-7 days',
+    ],
+    redFlagCriteria: [
+      { condition: 'Severe swelling beyond Day 7', riskLevel: 'ORANGE', timeframe: 'Day 7+' },
+      { condition: 'Signs of infection', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+      { condition: 'Skin necrosis', riskLevel: 'RED', timeframe: 'Days' },
+      { condition: 'Nerve injury signs', riskLevel: 'RED', timeframe: 'Days-Weeks' },
+    ],
+    silenceRiskWeight: 1.2,
+  },
+  OTHER: {
+    procedureType: 'OTHER',
+    category: 'Other',
+    substance: 'Unknown',
+    typicalVolumes: 'Variable',
+    recoveryTimeline: {
+      day_0_1: 'Monitor for immediate complications.',
+      day_2_7: 'Standard recovery monitoring.',
+      day_7_14: 'Assess treatment outcome.',
+    },
+    normalSymptoms: ['Mild swelling', 'Mild bruising', 'Tenderness'],
+    warningSigns: ['Persistent symptoms', 'Signs of infection', 'Worsening condition'],
+    emergencySigns: ['Severe pain', 'Signs of infection', 'Allergic reaction'],
+    followUpSchedule: [
+      { day: 1, type: 'Photo', purpose: 'Early assessment' },
+      { day: 7, type: 'Photo + Questionnaire', purpose: 'Healing assessment' },
+      { day: 14, type: 'Photo + Questionnaire', purpose: 'Outcome evaluation' },
+    ],
+    contraindications: ['Active infection', 'Known allergy', 'Pregnancy'],
+    postProcedureInstructions: [
+      'Follow post-procedure instructions provided by your clinician',
+      'Contact clinic for any concerning symptoms',
+      'Upload photos at scheduled check-in times',
+    ],
+    redFlagCriteria: [
+      { condition: 'Signs of infection', riskLevel: 'ORANGE', timeframe: 'Day 2+' },
+      { condition: 'Severe pain', riskLevel: 'ORANGE', timeframe: 'Immediate' },
+      { condition: 'Allergic reaction', riskLevel: 'ORANGE', timeframe: 'Hours-Days' },
+    ],
+    silenceRiskWeight: 1.0,
   },
 }
 

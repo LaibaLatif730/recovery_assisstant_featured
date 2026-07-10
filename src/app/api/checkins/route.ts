@@ -18,7 +18,13 @@ export async function GET(req: Request) {
     const where: any = {}
     if (patientId) where.patientId = patientId
     if (treatmentId) where.treatmentId = treatmentId
-    if (status) where.status = status
+    if (status) {
+      if (status === 'SILENCE_RISK') {
+        where.status = 'SILENCE_RISK'
+      } else {
+        where.status = status
+      }
+    }
 
     if (clinicId) {
       where.patient = { clinicId }
