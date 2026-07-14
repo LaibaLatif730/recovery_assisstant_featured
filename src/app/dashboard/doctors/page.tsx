@@ -33,6 +33,10 @@ export default function DoctorsPage() {
     specialty: '',
     licenseNo: '',
   })
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', specialty: '', licenseNo: '' })
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const { validate, getFieldError } = useZodForm(registerSchema)
 
@@ -93,6 +97,47 @@ export default function DoctorsPage() {
       fetchDoctors()
     } catch (error) {
       console.error('Error toggling doctor:', error)
+    }
+  }
+
+  const startEdit = (doctor: Doctor) => {
+    setEditForm({
+      name: doctor.user.name || '',
+      email: doctor.user.email || '',
+      phone: doctor.user.phone || '',
+      specialty: doctor.specialty || '',
+      licenseNo: doctor.licenseNo || '',
+    })
+    setEditingId(doctor.id)
+  }
+
+  const saveEdit = async (id: string) => {
+    try {
+      await fetch('/api/doctors', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...editForm }),
+      })
+      setEditingId(null)
+      fetchDoctors()
+    } catch (error) {
+      console.error('Error saving doctor:', error)
+    }
+  }
+
+  const deleteDoctor = async (id: string) => {
+    setDeleting(id)
+    try {
+      const res = await fetch(`/api/doctors?id=${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.deactivated) {
+        alert('Doctor has existing records and was deactivated instead of deleted.')
+      }
+      fetchDoctors()
+    } catch (error) {
+      console.error('Error deleting doctor:', error)
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -219,37 +264,127 @@ export default function DoctorsPage() {
           ) : (
             <div className="space-y-3">
               {doctors.map((doctor) => (
-                <div key={doctor.id} className="flex items-center justify-between p-4 rounded-lg border hover:bg-white/5 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                      <span className="text-lg font-bold text-white">
-                        {doctor.user.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </span>
+                <div key={doctor.id} className="rounded-lg border overflow-hidden">
+                  <div
+                    className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors cursor-pointer"
+                    onClick={() => setExpandedId(expandedId === doctor.id ? null : doctor.id)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                        <span className="text-lg font-bold text-white">
+                          {doctor.user.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-white">{doctor.user.name}</h3>
+                        <p className="text-sm text-muted-foreground">{doctor.user.email}</p>
+                        {doctor.specialty && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{doctor.specialty}</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium text-white">{doctor.user.name}</h3>
-                      <p className="text-sm text-muted-foreground">{doctor.user.email}</p>
-                      {doctor.specialty && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{doctor.specialty}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right text-sm">
+                        <p className="text-white">{doctor._count.treatments} treatments</p>
+                        <p className="text-muted-foreground">{doctor._count.appointments} appointments</p>
+                      </div>
+                      <Badge variant={doctor.isActive ? 'outline' : 'destructive'}>
+                        {doctor.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                      <svg className={`w-5 h-5 text-muted-foreground transition-transform ${expandedId === doctor.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {expandedId === doctor.id && (
+                    <div className="px-4 pb-4 pt-0 border-t bg-white/5 space-y-3">
+                      {editingId === doctor.id ? (
+                        <div className="grid grid-cols-2 gap-3 text-sm pt-3">
+                          <div>
+                            <label className="text-xs text-muted-foreground">Name</label>
+                            <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white text-sm" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">Email</label>
+                            <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white text-sm" type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">Phone</label>
+                            <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white text-sm" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">Specialty</label>
+                            <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white text-sm" value={editForm.specialty} onChange={e => setEditForm({...editForm, specialty: e.target.value})} />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">License No</label>
+                            <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white text-sm" value={editForm.licenseNo} onChange={e => setEditForm({...editForm, licenseNo: e.target.value})} />
+                          </div>
+                          <div className="flex items-end gap-2">
+                            <Button size="sm" onClick={() => saveEdit(doctor.id)}>Save</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-2 gap-3 text-sm pt-3">
+                            <div>
+                              <span className="text-muted-foreground">Phone:</span>
+                              <span className="ml-2 text-white">{doctor.user.phone || 'Not provided'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">License:</span>
+                              <span className="ml-2 text-white">{doctor.licenseNo || 'Not provided'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Specialty:</span>
+                              <span className="ml-2 text-white">{doctor.specialty || 'Not specified'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Joined:</span>
+                              <span className="ml-2 text-white">{new Date(doctor.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Status:</span>
+                              <span className={`ml-2 ${doctor.isActive ? 'text-green-400' : 'text-red-400'}`}>
+                                {doctor.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">User ID:</span>
+                              <span className="ml-2 text-white font-mono text-xs">{doctor.user.id}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <Button size="sm" variant="outline" onClick={() => startEdit(doctor)}>
+                              <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Edit
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => toggleActive(doctor)}>
+                              {doctor.isActive ? 'Deactivate' : 'Activate'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={deleting === doctor.id}
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete ${doctor.user.name}?`)) {
+                                  deleteDoctor(doctor.id)
+                                }
+                              }}
+                            >
+                              <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              {deleting === doctor.id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </div>
+                        </>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right text-sm">
-                      <p className="text-white">{doctor._count.treatments} treatments</p>
-                      <p className="text-muted-foreground">{doctor._count.appointments} appointments</p>
-                    </div>
-                    <Badge variant={doctor.isActive ? 'outline' : 'destructive'}>
-                      {doctor.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleActive(doctor)}
-                    >
-                      {doctor.isActive ? 'Deactivate' : 'Activate'}
-                    </Button>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

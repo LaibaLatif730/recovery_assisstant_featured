@@ -41,19 +41,18 @@ export default function PatientDashboard() {
   const [patientName, setPatientName] = useState('')
 
   useEffect(() => {
-    const patientId = localStorage.getItem('patientId')
     const name = localStorage.getItem('patientName')
-    if (!patientId) {
-      router.push('/patient/login')
-      return
-    }
     setPatientName(name || '')
-    fetchPatientData(patientId)
+    fetchPatientData()
   }, [router])
 
-  const fetchPatientData = async (patientId: string) => {
+  const fetchPatientData = async () => {
     try {
-      const res = await fetch(`/api/patient/data?patientId=${patientId}`)
+      const res = await fetch('/api/patient/data')
+      if (!res.ok) {
+        router.push('/patient/login')
+        return
+      }
       const data = await res.json()
       setPatient(data)
     } catch (error) {
@@ -63,8 +62,10 @@ export default function PatientDashboard() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('patientId')
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/patient/auth/logout', { method: 'POST' })
+    } catch {}
     localStorage.removeItem('patientName')
     router.push('/patient/login')
   }
@@ -77,7 +78,7 @@ export default function PatientDashboard() {
         allCheckIns.push({ ...ci, treatmentType: t.type })
       })
     })
-    
+     
     return allCheckIns
       .filter((ci) => ci.status === 'PENDING' || ci.status === 'SENT')
       .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())

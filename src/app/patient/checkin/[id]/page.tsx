@@ -55,37 +55,14 @@ export default function CheckInPage() {
 
   const fetchCheckIn = async () => {
     try {
-      let id = (params.id as string).replace(/\s/g, '+')
-
-      // If it looks like a phone number, find the check-in by patient phone
-      if (id.startsWith('+') || /^\d{3}-\d{3}-\d{4}$/.test(id)) {
-        try {
-          const patientRes = await fetch(`/api/patient/auth`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: id }),
-          })
-          const patientData = await patientRes.json()
-          console.log('Patient auth result:', patientData)
-          if (patientData.patientId) {
-            localStorage.setItem('patientId', patientData.patientId)
-            localStorage.setItem('patientName', patientData.name)
-            
-            const checkInRes = await fetch(`/api/patient/checkin/pending?patientId=${patientData.patientId}`)
-            const checkInData = await checkInRes.json()
-            console.log('Pending check-in result:', checkInData)
-            if (checkInData.checkInId) {
-              id = checkInData.checkInId
-            }
-          }
-        } catch (e) {
-          console.error('Phone lookup error:', e)
-        }
-      }
+      const id = (params.id as string).replace(/\s/g, '+')
 
       const res = await fetch(`/api/patient/checkin?checkInId=${id}`)
+      if (!res.ok) {
+        router.push('/patient/login')
+        return
+      }
       const data = await res.json()
-      console.log('Check-in data:', data)
       setCheckIn(data)
     } catch (error) {
       console.error('Error fetching check-in:', error)
@@ -94,8 +71,10 @@ export default function CheckInPage() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('patientId')
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/patient/auth/logout', { method: 'POST' })
+    } catch {}
     localStorage.removeItem('patientName')
     router.push('/patient/login')
   }
@@ -114,11 +93,9 @@ export default function CheckInPage() {
 
     setUploading(true)
     try {
-      const patientId = localStorage.getItem('patientId')
       const formData = new FormData()
       formData.append('photo', selectedFile)
       formData.append('checkInId', checkIn.id)
-      formData.append('patientId', patientId || '')
       formData.append('message', message)
 
       const res = await fetch('/api/patient/checkin/upload', {

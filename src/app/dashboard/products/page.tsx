@@ -191,7 +191,6 @@ export default function ProductsPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Edit Product</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setEditingProduct(null)}>Cancel</Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">

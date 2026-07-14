@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +15,7 @@ interface Patient {
   email: string
   phone: string
   gender: string
+  isActive: boolean
   createdAt: string
   _count: {
     treatments: number
@@ -23,10 +25,12 @@ interface Patient {
 }
 
 export default function PatientsPage() {
+  const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [userRole, setUserRole] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchPatients()
@@ -49,6 +53,19 @@ export default function PatientsPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     fetchPatients()
+  }
+
+  const deletePatient = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete ${name}?`)) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/patients/${id}`, { method: 'DELETE' })
+      fetchPatients()
+    } catch (error) {
+      console.error('Error deleting patient:', error)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
@@ -107,10 +124,10 @@ export default function PatientsPage() {
           ) : (
             <div className="space-y-4">
               {patients.map((patient) => (
-                <Link
+                <div
                   key={patient.id}
-                  href={`/dashboard/patients/${patient.id}`}
-                  className="block p-4 rounded-lg border hover:bg-white/5 transition-colors"
+                  className="p-4 rounded-lg border hover:bg-white/5 transition-colors cursor-pointer"
+                  onClick={() => router.push(`/dashboard/patients/${patient.id}`)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -130,9 +147,36 @@ export default function PatientsPage() {
                         <p className="text-sm text-muted-foreground">{patient._count.checkIns} check-ins</p>
                       </div>
                       <Badge variant="outline">{patient.gender || 'N/A'}</Badge>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(`/dashboard/patients/${patient.id}`)
+                        }}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </Button>
+                      {userRole === 'ADMIN' && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={deletingId === patient.id}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deletePatient(patient.id, `${patient.firstName} ${patient.lastName}`)
+                          }}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </Button>
+                      )}
                     </div>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           )}

@@ -35,6 +35,7 @@ const COMPLICATION_RISK_WEIGHT: Record<string, number> = {
 
 export interface SilenceRiskResult {
   checkInId: string
+  patientId: string
   patientName: string
   treatmentType: string
   missedDayNumber: number
@@ -102,6 +103,7 @@ export async function detectSilenceRisks(): Promise<SilenceRiskResult[]> {
 
     results.push({
       checkInId: checkIn.id,
+      patientId: checkIn.patientId,
       patientName: `${checkIn.patient.firstName} ${checkIn.patient.lastName}`,
       treatmentType,
       missedDayNumber: checkIn.dayNumber,

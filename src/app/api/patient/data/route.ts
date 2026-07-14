@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { requirePatientAuth } from '@/lib/patient-auth'
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url)
-    const patientId = searchParams.get('patientId')
-
-    if (!patientId) {
-      return NextResponse.json({ error: 'Patient ID is required' }, { status: 400 })
-    }
-
-    // Verify patientId is a valid cuid format to prevent injection
-    if (!/^c[a-z0-9]{24,}$/.test(patientId)) {
-      return NextResponse.json({ error: 'Invalid patient ID format' }, { status: 400 })
-    }
+    const { patientId } = await requirePatientAuth()
 
     const patient = await prisma.patient.findUnique({
       where: { id: patientId, isActive: true },
@@ -40,7 +31,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
-    // Only return non-sensitive fields for the patient portal
     const safeData = {
       id: patient.id,
       firstName: patient.firstName,
@@ -51,6 +41,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json(safeData)
   } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     console.error('Error fetching patient data:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

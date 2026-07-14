@@ -1,34 +1,78 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { verifyPin, setPatientSessionCookie } from '@/lib/patient-auth'
+
+function normalize(s: string) {
+  return s.replace(/[^0-9]/g, '')
+}
+
+const attempts = new Map<string, { count: number; resetAt: number }>()
+const MAX_ATTEMPTS = 5
+const WINDOW_MS = 15 * 60 * 1000
+
+function checkRateLimit(key: string): boolean {
+  const now = Date.now()
+  const record = attempts.get(key)
+
+  if (!record || now > record.resetAt) {
+    attempts.set(key, { count: 1, resetAt: now + WINDOW_MS })
+    return true
+  }
+
+  if (record.count >= MAX_ATTEMPTS) {
+    return false
+  }
+
+  record.count++
+  return true
+}
 
 export async function POST(req: Request) {
   try {
-    const { phone } = await req.json()
+    const body = await req.json()
+    const { phone, pin } = body
 
     if (!phone) {
       return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
     }
 
-    const normalize = (s: string) => s.replace(/[^0-9]/g, '')
-    const normalizedInput = normalize(phone)
+    const normalizedPhone = normalize(phone)
 
-    const patients = await prisma.patient.findMany({
-      where: { isActive: true },
-      select: { id: true, firstName: true, lastName: true, phone: true },
-    })
-
-    const patient = patients.find(p => p.phone && normalize(p.phone) === normalizedInput)
-
-    if (!patient) {
-      return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
+    if (!checkRateLimit(normalizedPhone)) {
+      return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 })
     }
 
+    if (!pin) {
+      return NextResponse.json({ error: 'PIN is required' }, { status: 400 })
+    }
+
+    const patient = await prisma.patient.findFirst({
+      where: { isActive: true, phone: { contains: normalizedPhone.slice(-10) } },
+      select: { id: true, firstName: true, lastName: true, phone: true, pinHash: true, pinSetAt: true },
+    })
+
+    if (!patient) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+    }
+
+    if (!patient.pinHash) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+    }
+
+    const valid = await verifyPin(pin, patient.pinHash)
+    if (!valid) {
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+    }
+
+    attempts.delete(normalizedPhone)
+
+    await setPatientSessionCookie(patient.id)
+
     return NextResponse.json({
-      patientId: patient.id,
       name: `${patient.firstName} ${patient.lastName}`,
     })
   } catch (error) {
     console.error('Patient auth error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Authentication failed' }, { status: 500 })
   }
 }

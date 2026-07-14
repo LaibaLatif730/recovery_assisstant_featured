@@ -74,6 +74,9 @@ export default function ComplicationsPage() {
   })
   const [formError, setFormError] = useState('')
   const { validate, getFieldError } = useZodForm(complicationSchema)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ complicationType: '', description: '', severity: '', treatmentGiven: '', outcome: '' })
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchComplications()
@@ -147,6 +150,46 @@ export default function ComplicationsPage() {
 
   const getComplicationLabel = (type: string) => {
     return COMPLICATION_TYPES.find(c => c.value === type)?.label || type
+  }
+
+  const startEdit = (comp: Complication) => {
+    setEditingId(comp.id)
+    setEditForm({
+      complicationType: comp.complicationType,
+      description: comp.description || '',
+      severity: comp.severity,
+      treatmentGiven: comp.treatmentGiven || '',
+      outcome: comp.outcome || '',
+    })
+  }
+
+  const saveEdit = async (id: string) => {
+    try {
+      const res = await fetch(`/api/complications/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      })
+      if (res.ok) {
+        setEditingId(null)
+        fetchComplications()
+      }
+    } catch (error) {
+      console.error('Error updating complication:', error)
+    }
+  }
+
+  const deleteComplication = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this complication?')) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/complications/${id}`, { method: 'DELETE' })
+      fetchComplications()
+    } catch (error) {
+      console.error('Error deleting complication:', error)
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const stats = {
@@ -305,26 +348,67 @@ export default function ComplicationsPage() {
                 <div key={comp.id} className="p-4 border rounded-lg hover:bg-white/5 transition-colors">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant={getSeverityBadge(comp.severity)}>{comp.severity}</Badge>
-                        <span className="font-medium">{getComplicationLabel(comp.complicationType)}</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {comp.patient.firstName} {comp.patient.lastName}
-                        {comp.treatment && ` • ${comp.treatment.type.replace(/_/g, ' ')}`}
-                        {` • Onset: ${formatDate(comp.onsetDate)}`}
-                      </p>
-                      {comp.description && <p className="text-sm mt-1">{comp.description}</p>}
-                      {comp.treatmentGiven && <p className="text-sm text-muted-foreground mt-1">Treatment: {comp.treatmentGiven}</p>}
-                      {comp.outcome && <p className="text-sm text-muted-foreground">Outcome: {comp.outcome}</p>}
-                    </div>
-                    <div className="text-right">
-                      {comp.resolutionDate ? (
-                        <Badge variant="outline">Resolved</Badge>
+                      {editingId === comp.id ? (
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <Select value={editForm.complicationType} onChange={(e) => setEditForm({ ...editForm, complicationType: e.target.value })}>
+                              {COMPLICATION_TYPES.map((c) => (
+                                <option key={c.value} value={c.value}>{c.label}</option>
+                              ))}
+                            </Select>
+                            <Select value={editForm.severity} onChange={(e) => setEditForm({ ...editForm, severity: e.target.value })}>
+                              {SEVERITY_OPTIONS.map((s) => (
+                                <option key={s.value} value={s.value}>{s.label}</option>
+                              ))}
+                            </Select>
+                          </div>
+                          <Textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={2} />
+                          <Textarea value={editForm.treatmentGiven} onChange={(e) => setEditForm({ ...editForm, treatmentGiven: e.target.value })} rows={2} placeholder="Treatment given" />
+                          <Textarea value={editForm.outcome} onChange={(e) => setEditForm({ ...editForm, outcome: e.target.value })} rows={2} placeholder="Outcome" />
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => saveEdit(comp.id)}>Save</Button>
+                          </div>
+                        </div>
                       ) : (
-                        <Badge variant="secondary">Active</Badge>
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant={getSeverityBadge(comp.severity)}>{comp.severity}</Badge>
+                            <span className="font-medium">{getComplicationLabel(comp.complicationType)}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {comp.patient.firstName} {comp.patient.lastName}
+                            {comp.treatment && ` • ${comp.treatment.type.replace(/_/g, ' ')}`}
+                            {` • Onset: ${formatDate(comp.onsetDate)}`}
+                          </p>
+                          {comp.description && <p className="text-sm mt-1">{comp.description}</p>}
+                          {comp.treatmentGiven && <p className="text-sm text-muted-foreground mt-1">Treatment: {comp.treatmentGiven}</p>}
+                          {comp.outcome && <p className="text-sm text-muted-foreground">Outcome: {comp.outcome}</p>}
+                        </>
                       )}
-                      {comp.reportedToRegulatory && <Badge variant="destructive" className="ml-2">Reported</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        {comp.resolutionDate ? (
+                          <Badge variant="outline">Resolved</Badge>
+                        ) : (
+                          <Badge variant="secondary">Active</Badge>
+                        )}
+                        {comp.reportedToRegulatory && <Badge variant="destructive" className="ml-2">Reported</Badge>}
+                      </div>
+                      {editingId !== comp.id && (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => startEdit(comp)}>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </Button>
+                          <Button size="sm" variant="destructive" disabled={deletingId === comp.id} onClick={() => deleteComplication(comp.id)}>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

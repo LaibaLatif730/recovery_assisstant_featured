@@ -163,7 +163,6 @@ export default function AppointmentsPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Edit Appointment</h2>
-              <Button size="sm" variant="outline" onClick={() => setEditingAppointment(null)}>Cancel</Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">

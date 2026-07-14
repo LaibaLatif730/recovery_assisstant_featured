@@ -46,6 +46,9 @@ export default function ClinicalNotesPage() {
   })
   const [formError, setFormError] = useState('')
   const { validate, getFieldError } = useZodForm(clinicalNoteSchema)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ noteType: '', content: '', isPrivate: false })
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchNotes()
@@ -115,6 +118,40 @@ export default function ClinicalNotesPage() {
       case 'PROGRESS': return 'outline'
       case 'RECOVERY_SUMMARY': return 'secondary'
       default: return 'outline'
+    }
+  }
+
+  const startEdit = (note: ClinicalNote) => {
+    setEditingId(note.id)
+    setEditForm({ noteType: note.noteType, content: note.content, isPrivate: note.isPrivate })
+  }
+
+  const saveEdit = async (id: string) => {
+    try {
+      const res = await fetch(`/api/clinical-notes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      })
+      if (res.ok) {
+        setEditingId(null)
+        fetchNotes()
+      }
+    } catch (error) {
+      console.error('Error updating note:', error)
+    }
+  }
+
+  const deleteNote = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this note?')) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/clinical-notes/${id}`, { method: 'DELETE' })
+      fetchNotes()
+    } catch (error) {
+      console.error('Error deleting note:', error)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -220,19 +257,63 @@ export default function ClinicalNotesPage() {
                 <div key={note.id} className="p-4 border rounded-lg hover:bg-white/5 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Badge variant={getNoteTypeBadge(note.noteType)}>{getNoteTypeLabel(note.noteType)}</Badge>
-                      {note.isAiGenerated && <Badge variant="secondary">AI Generated</Badge>}
-                      {note.isPrivate && <Badge variant="outline">Private</Badge>}
+                      {editingId === note.id ? (
+                        <Select value={editForm.noteType} onChange={(e) => setEditForm({ ...editForm, noteType: e.target.value })}>
+                          {NOTE_TYPES.map((n) => (
+                            <option key={n.value} value={n.value}>{n.label}</option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <>
+                          <Badge variant={getNoteTypeBadge(note.noteType)}>{getNoteTypeLabel(note.noteType)}</Badge>
+                          {note.isAiGenerated && <Badge variant="secondary">AI Generated</Badge>}
+                          {note.isPrivate && <Badge variant="outline">Private</Badge>}
+                        </>
+                      )}
                     </div>
-                    <span className="text-sm text-muted-foreground">{formatDate(note.createdAt)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">{formatDate(note.createdAt)}</span>
+                      {editingId === note.id ? (
+                          <Button size="sm" onClick={() => saveEdit(note.id)}>Save</Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => startEdit(note)}>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </Button>
+                          <Button size="sm" variant="destructive" disabled={deletingId === note.id} onClick={() => deleteNote(note.id)}>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-muted-foreground mb-2">
                     {note.patient.firstName} {note.patient.lastName}
                     {note.treatment && ` • ${note.treatment.type.replace(/_/g, ' ')}`}
                   </p>
-                  <div className="p-3 bg-white/5 rounded-lg">
-                    <pre className="text-sm whitespace-pre-wrap font-mono">{note.content}</pre>
-                  </div>
+                  {editingId === note.id ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editForm.content}
+                        onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+                        rows={6}
+                      />
+                      <div className="flex gap-2">
+                        <Select value={editForm.isPrivate ? 'true' : 'false'} onChange={(e) => setEditForm({ ...editForm, isPrivate: e.target.value === 'true' })}>
+                          <option value="false">Public</option>
+                          <option value="true">Private</option>
+                        </Select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-white/5 rounded-lg">
+                      <pre className="text-sm whitespace-pre-wrap font-mono">{note.content}</pre>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

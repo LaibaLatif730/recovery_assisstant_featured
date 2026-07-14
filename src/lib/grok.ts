@@ -27,7 +27,10 @@ export interface GrokAnalysis {
   }
   labels: string[]
   rationale: string
+  confidenceScore: number
   confidenceFactors: { factor: string; weight: number; impact: string }[]
+  aiUnavailable?: boolean
+  aiFailureReason?: string
   trendDirection?: 'IMPROVING' | 'STABLE' | 'WORSENING'
   trendDetails?: { metric: string; previousScore: number; currentScore: number; changePercent: number }[]
 }
@@ -117,6 +120,7 @@ RETURN ONLY valid JSON with this structure:
   "recommendedAction": "Specific clinical action required",
   "labels": ["detected_feature_1", "detected_feature_2"],
   "rationale": "Structured explanation of WHY this risk level was assigned. Be specific: 'Bruising area increased ~18% versus expected timeline; mild asymmetry detected near the injection site consistent with normal Day ${dayNumber} recovery pattern' or 'Blanching of skin detected near nasolabial fold, suspicious for vascular compromise — immediate intervention required'.",
+  "confidenceScore": 0.0-1.0,
   "confidenceFactors": [
     {"factor": "feature_name", "weight": 0.0-1.0, "impact": "positive|negative|neutral"}
   ]
@@ -131,6 +135,7 @@ Rules:
 - Document findings objectively
 - Do not diagnose, assess recovery status and flag concerns
 - The rationale MUST explain the reasoning behind the risk classification in clinical terms
+- confidenceScore is your overall confidence in this assessment (0.0-1.0). Low confidence = poor image quality, ambiguous features, or borderline classification. High confidence = clear image with unambiguous clinical features.
 - confidenceFactors should list the top 3-5 factors that influenced the classification`
 }
 
@@ -145,8 +150,8 @@ export async function analyzeWithGrok(
   const prompt = getTreatmentSpecificPrompt(treatmentType || 'OTHER', dayNumber || 1)
 
   if (!apiKey) {
-    console.log('No GROK_API_KEY set, using fallback clinical analysis')
-    return fallbackClinicalAnalysis(treatmentType, dayNumber)
+    console.error('[AI_UNAVAILABLE] GROQ_API_KEY environment variable is not set')
+    return fallbackClinicalAnalysis(treatmentType, dayNumber, 'GROQ_API_KEY not configured')
   }
 
   try {
@@ -180,8 +185,8 @@ export async function analyzeWithGrok(
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Groq API error:', response.status, errorText)
-      return fallbackClinicalAnalysis(treatmentType, dayNumber)
+      console.error('[AI_UNAVAILABLE] Groq API error:', response.status, errorText)
+      return fallbackClinicalAnalysis(treatmentType, dayNumber, `Groq API returned ${response.status}: ${errorText.slice(0, 200)}`)
     }
 
     const data = await response.json()
@@ -219,15 +224,16 @@ export async function analyzeWithGrok(
         recommendedAction: parsed.recommendedAction || '',
         clinicalFeatures: features,
         labels: parsed.labels || [],
+        confidenceScore: typeof parsed.confidenceScore === 'number' ? Math.min(1, Math.max(0, parsed.confidenceScore)) : 0.5,
         rationale: parsed.rationale || generateDefaultRationale(features, riskClassification.level, treatmentType, dayNumber),
         confidenceFactors: parsed.confidenceFactors || [],
       }
     }
 
-    return fallbackClinicalAnalysis(treatmentType, dayNumber)
+    return fallbackClinicalAnalysis(treatmentType, dayNumber, 'Groq returned no parseable JSON in response')
   } catch (error) {
-    console.error('Groq clinical analysis error:', error)
-    return fallbackClinicalAnalysis(treatmentType, dayNumber)
+    console.error('[AI_UNAVAILABLE] Groq clinical analysis error:', error)
+    return fallbackClinicalAnalysis(treatmentType, dayNumber, error instanceof Error ? error.message : 'Unknown runtime error')
   }
 }
 
@@ -249,48 +255,50 @@ function generateDefaultRationale(
 
 function fallbackClinicalAnalysis(
   treatmentType?: string,
-  dayNumber?: number
+  dayNumber?: number,
+  reason?: string
 ): GrokAnalysis {
-  const features = {
-    edema: Math.random() * 0.3,
-    ecchymosis: Math.random() * 0.3,
-    erythema: Math.random() * 0.2,
-    asymmetry: Math.random() * 0.15,
-    nodules: 0,
-    vascularity: 0,
-  }
+  const failureReason = reason || 'Unknown error'
 
-  const riskClassification = classifyRiskLevel({
-    swelling: features.edema,
-    bruising: features.ecchymosis,
-    redness: features.erythema,
-    asymmetry: features.asymmetry,
-  })
+  console.error(`[AI_UNAVAILABLE] Clinical analysis failed: ${failureReason}. Returning ORANGE for mandatory human review.`)
 
   return {
-    riskLevel: riskClassification.level,
+    riskLevel: 'ORANGE',
     findings: [
       {
-        type: 'normal',
-        severity: 'none',
-        score: 0,
-        description: 'Recovery appears to be progressing normally',
-        clinicalSignificance: 'Expected post-procedure findings',
+        type: 'AI_ANALYSIS_UNAVAILABLE',
+        severity: 'moderate',
+        score: 0.5,
+        description: `AI clinical analysis could not be completed. Reason: ${failureReason}. This photo requires mandatory clinician review.`,
+        clinicalSignificance: 'AI system unavailable — cannot assess recovery status. Manual clinical evaluation required to rule out complications.',
       },
     ],
-    recommendations: ['Continue with current aftercare routine', 'Upload another photo at next scheduled check-in'],
-    aiResponse: 'Assessment complete. Recovery appears normal.',
-    clinicalSummary: 'Normal recovery trajectory. No concerning features identified.',
-    recommendedAction: 'No intervention required. Continue scheduled monitoring.',
-    clinicalFeatures: features,
-    labels: ['normal_recovery'],
-    rationale: `Mild edema and ecchymosis detected within expected range for Day ${dayNumber || 1} post-${(treatmentType || 'unknown').replace(/_/g, ' ').toLowerCase()}. Classification: GREEN. Findings consistent with normal recovery trajectory.`,
-    confidenceFactors: [
-      { factor: 'edema_level', weight: 0.3, impact: 'neutral' },
-      { factor: 'ecchymosis_level', weight: 0.25, impact: 'neutral' },
-      { factor: 'timeline_match', weight: 0.25, impact: 'positive' },
-      { factor: 'vascular_indicators', weight: 0.2, impact: 'positive' },
+    recommendations: [
+      'CLINICIAN REVIEW REQUIRED: AI analysis system was unable to process this photo',
+      'Manually review uploaded photo for signs of vascular compromise, necrosis, or abnormal healing',
+      'Contact patient if clinical concern is identified',
+      'Do not dismiss this check-in without visual inspection by a qualified clinician',
     ],
+    aiResponse: 'AI analysis unavailable — mandatory clinician review required',
+    clinicalSummary: `AI ANALYSIS FAILED: ${failureReason}. This check-in has been flagged for mandatory human review. The photo was uploaded successfully but could not be assessed by the AI system. A clinician must manually review this submission to ensure patient safety.`,
+    recommendedAction: 'MANDATORY CLINICIAN REVIEW — AI system could not analyze this photo',
+    clinicalFeatures: {
+      edema: 0,
+      ecchymosis: 0,
+      erythema: 0,
+      asymmetry: 0,
+      nodules: 0,
+      vascularity: 0,
+    },
+    labels: ['AI_UNAVAILABLE', 'REQUIRES_MANUAL_REVIEW'],
+    confidenceScore: 0,
+    rationale: `AI analysis system unavailable (${failureReason}). Risk level defaulted to ORANGE to ensure mandatory clinician review. No clinical assessment was performed — all scores are placeholders. A qualified clinician must manually review this photo to determine patient recovery status and rule out complications including vascular occlusion or necrosis.`,
+    confidenceFactors: [
+      { factor: 'ai_system_status', weight: 1.0, impact: 'negative' },
+      { factor: 'analysis_completed', weight: 0, impact: 'negative' },
+    ],
+    aiUnavailable: true,
+    aiFailureReason: failureReason,
   }
 }
 

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { requirePatientAuth } from '@/lib/patient-auth'
 
 export async function GET(req: Request) {
   try {
+    const { patientId } = await requirePatientAuth()
     const { searchParams } = new URL(req.url)
     const checkInId = searchParams.get('checkInId')
 
@@ -10,7 +12,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Check-in ID is required' }, { status: 400 })
     }
 
-    // Verify checkInId is a valid cuid format
     if (!/^c[a-z0-9]{24,}$/.test(checkInId)) {
       return NextResponse.json({ error: 'Invalid check-in ID format' }, { status: 400 })
     }
@@ -32,8 +33,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Check-in not found' }, { status: 404 })
     }
 
+    if (checkIn.patientId !== patientId) {
+      return NextResponse.json({ error: 'Check-in not found' }, { status: 404 })
+    }
+
     return NextResponse.json(checkIn)
   } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     console.error('Error fetching check-in:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

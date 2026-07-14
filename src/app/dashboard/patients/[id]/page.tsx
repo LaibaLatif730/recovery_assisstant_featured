@@ -56,6 +56,13 @@ export default function PatientDetailPage() {
   const [patient, setPatient] = useState<Patient | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editForm, setEditForm] = useState({
+    firstName: '', lastName: '', email: '', phone: '', gender: '',
+    dateOfBirth: '', address: '', medicalHistory: '', allergies: '',
+    medications: '', emergencyContact: '',
+  })
 
   useEffect(() => {
     fetchPatient()
@@ -70,6 +77,43 @@ export default function PatientDetailPage() {
       console.error('Error fetching patient:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const startEditing = () => {
+    if (!patient) return
+    setEditForm({
+      firstName: patient.firstName || '',
+      lastName: patient.lastName || '',
+      email: patient.email || '',
+      phone: patient.phone || '',
+      gender: patient.gender || '',
+      dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.split('T')[0] : '',
+      address: patient.address || '',
+      medicalHistory: patient.medicalHistory || '',
+      allergies: patient.allergies || '',
+      medications: patient.medications || '',
+      emergencyContact: '',
+    })
+    setEditing(true)
+  }
+
+  const savePatient = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/patients/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      })
+      if (res.ok) {
+        await fetchPatient()
+        setEditing(false)
+      }
+    } catch (error) {
+      console.error('Error saving patient:', error)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -118,7 +162,13 @@ export default function PatientDetailPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => router.back()}>Back</Button>
-          <Button>Edit Patient</Button>
+          {editing ? (
+              <Button onClick={savePatient} disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+          ) : (
+            <Button onClick={startEditing}>Edit Patient</Button>
+          )}
         </div>
       </div>
 
@@ -143,50 +193,111 @@ export default function PatientDetailPage() {
               <CardTitle>Personal Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Gender</span>
-                <span>{patient.gender || 'Not specified'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Date of Birth</span>
-                <span>{patient.dateOfBirth ? formatDate(patient.dateOfBirth) : 'Not specified'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Address</span>
-                <span className="text-right max-w-xs">{patient.address || 'Not specified'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Allergies</span>
-                <span className="text-right max-w-xs">{patient.allergies || 'None'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Medications</span>
-                <span className="text-right max-w-xs">{patient.medications || 'None'}</span>
-              </div>
+              {editing ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm text-muted-foreground">First Name</label>
+                      <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white" value={editForm.firstName} onChange={e => setEditForm({...editForm, firstName: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Last Name</label>
+                      <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white" value={editForm.lastName} onChange={e => setEditForm({...editForm, lastName: e.target.value})} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Email</label>
+                    <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white" type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Phone</label>
+                    <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Gender</label>
+                    <select className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white" value={editForm.gender} onChange={e => setEditForm({...editForm, gender: e.target.value})}>
+                      <option value="">Select</option>
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Date of Birth</label>
+                    <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white" type="date" value={editForm.dateOfBirth} onChange={e => setEditForm({...editForm, dateOfBirth: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Address</label>
+                    <input className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white" value={editForm.address} onChange={e => setEditForm({...editForm, address: e.target.value})} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Gender</span>
+                    <span>{patient.gender || 'Not specified'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Date of Birth</span>
+                    <span>{patient.dateOfBirth ? formatDate(patient.dateOfBirth) : 'Not specified'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Address</span>
+                    <span className="text-right max-w-xs">{patient.address || 'Not specified'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Allergies</span>
+                    <span className="text-right max-w-xs">{patient.allergies || 'None'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Medications</span>
+                    <span className="text-right max-w-xs">{patient.medications || 'None'}</span>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Statistics</CardTitle>
+              <CardTitle>{editing ? 'Medical History' : 'Statistics'}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Total Treatments</span>
-                <span className="font-medium">{patient.treatments.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Check-ins</span>
-                <span className="font-medium">{patient.checkIns.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Appointments</span>
-                <span className="font-medium">{patient.appointments.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Photos Uploaded</span>
-                <span className="font-medium">{patient.photos.length}</span>
-              </div>
+              {editing ? (
+                <>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Medical History</label>
+                    <textarea className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white h-20" value={editForm.medicalHistory} onChange={e => setEditForm({...editForm, medicalHistory: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Allergies</label>
+                    <textarea className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white h-16" value={editForm.allergies} onChange={e => setEditForm({...editForm, allergies: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Medications</label>
+                    <textarea className="w-full mt-1 p-2 rounded-md bg-white/5 border border-white/10 text-white h-16" value={editForm.medications} onChange={e => setEditForm({...editForm, medications: e.target.value})} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Treatments</span>
+                    <span className="font-medium">{patient.treatments.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Check-ins</span>
+                    <span className="font-medium">{patient.checkIns.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Appointments</span>
+                    <span className="font-medium">{patient.appointments.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Photos Uploaded</span>
+                    <span className="font-medium">{patient.photos.length}</span>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from 'crypto'
+
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0'
 
 export interface WhatsAppMessage {
@@ -139,4 +141,43 @@ export function parseWhatsAppWebhook(body: any): {
   }
 
   return { messages, phoneNumbers }
+}
+
+export function verifyWhatsAppSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const appSecret = process.env.WHATSAPP_APP_SECRET
+  if (!appSecret) {
+    console.error('[SECURITY] WHATSAPP_APP_SECRET not configured — webhook signature cannot be verified')
+    return false
+  }
+
+  if (!signatureHeader) {
+    console.error('[SECURITY] Missing X-Hub-Signature-256 header')
+    return false
+  }
+
+  const expectedPrefix = 'sha256='
+  if (!signatureHeader.startsWith(expectedPrefix)) {
+    console.error('[SECURITY] Invalid signature format — missing sha256= prefix')
+    return false
+  }
+
+  const expectedSignature = signatureHeader.slice(expectedPrefix.length)
+  const hmac = createHmac('sha256', appSecret)
+  hmac.update(rawBody)
+  const computedSignature = hmac.digest('hex')
+
+  try {
+    const sigBuffer = Buffer.from(expectedSignature, 'hex')
+    const computedBuffer = Buffer.from(computedSignature, 'hex')
+
+    if (sigBuffer.length !== computedBuffer.length) {
+      console.error('[SECURITY] WhatsApp webhook signature mismatch — length differs')
+      return false
+    }
+
+    return timingSafeEqual(sigBuffer, computedBuffer)
+  } catch {
+    console.error('[SECURITY] WhatsApp webhook signature verification failed')
+    return false
+  }
 }

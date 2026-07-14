@@ -75,6 +75,9 @@ export default function InjectionMappingPage() {
     notes: '',
   })
   const { validate, getFieldError } = useZodForm(injectionMappingSchema)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ area: '', subArea: '', units: '', volume: '', technique: '', needleCannula: '', depth: '', aspiration: 'N/A', notes: '' })
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchMappings()
@@ -143,11 +146,45 @@ export default function InjectionMappingPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this injection mapping?')) return
+    setDeletingId(id)
     try {
       await fetch(`/api/injection-mappings?id=${id}`, { method: 'DELETE' })
       fetchMappings()
     } catch (error) {
       console.error('Error deleting mapping:', error)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const startEdit = (mapping: InjectionMapping) => {
+    setEditingId(mapping.id)
+    setEditForm({
+      area: mapping.area,
+      subArea: mapping.subArea || '',
+      units: mapping.units?.toString() || '',
+      volume: mapping.volume?.toString() || '',
+      technique: mapping.technique || '',
+      needleCannula: mapping.needleCannula || '',
+      depth: mapping.depth || '',
+      aspiration: mapping.aspiration || 'N/A',
+      notes: mapping.notes || '',
+    })
+  }
+
+  const saveEdit = async (id: string) => {
+    try {
+      const res = await fetch('/api/injection-mappings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...editForm }),
+      })
+      if (res.ok) {
+        setEditingId(null)
+        fetchMappings()
+      }
+    } catch (error) {
+      console.error('Error updating mapping:', error)
     }
   }
 
@@ -286,24 +323,70 @@ export default function InjectionMappingPage() {
                       <div key={mapping.id} className="p-4 border rounded-lg hover:bg-white/5 transition-colors">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge variant="outline">{mapping.area}</Badge>
-                              {mapping.subArea && <Badge variant="secondary">{mapping.subArea}</Badge>}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {mapping.treatment.type.replace(/_/g, ' ')} — {formatDate(mapping.treatment.treatmentDate)}
-                            </p>
-                            <div className="flex flex-wrap gap-4 mt-2 text-sm">
-                              {mapping.units && <span>Units: <strong>{mapping.units}</strong></span>}
-                              {mapping.volume && <span>Volume: <strong>{mapping.volume}mL</strong></span>}
-                              {mapping.product && <span>Product: <strong>{mapping.product.name}</strong></span>}
-                              {mapping.technique && <span>Technique: {mapping.technique}</span>}
-                              {mapping.needleCannula && <span>Device: {mapping.needleCannula}</span>}
-                              {mapping.depth && <span>Depth: {mapping.depth}</span>}
-                            </div>
-                            {mapping.notes && <p className="text-sm text-muted-foreground mt-1">{mapping.notes}</p>}
+                            {editingId === mapping.id ? (
+                              <div className="space-y-2">
+                                <div className="flex gap-2">
+                                  <Select value={editForm.area} onChange={(e) => setEditForm({ ...editForm, area: e.target.value })}>
+                                    {INJECTION_AREAS.map((a) => (
+                                      <option key={a} value={a}>{a}</option>
+                                    ))}
+                                  </Select>
+                                  <Input value={editForm.subArea} onChange={(e) => setEditForm({ ...editForm, subArea: e.target.value })} placeholder="Sub-area" />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Input type="number" step="0.5" value={editForm.units} onChange={(e) => setEditForm({ ...editForm, units: e.target.value })} placeholder="Units" />
+                                  <Input type="number" step="0.05" value={editForm.volume} onChange={(e) => setEditForm({ ...editForm, volume: e.target.value })} placeholder="Volume (mL)" />
+                                  <Input value={editForm.technique} onChange={(e) => setEditForm({ ...editForm, technique: e.target.value })} placeholder="Technique" />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Input value={editForm.needleCannula} onChange={(e) => setEditForm({ ...editForm, needleCannula: e.target.value })} placeholder="Needle/Cannula" />
+                                  <Select value={editForm.depth} onChange={(e) => setEditForm({ ...editForm, depth: e.target.value })}>
+                                    <option value="">Depth</option>
+                                    {DEPTH_OPTIONS.map((d) => (
+                                      <option key={d.value} value={d.value}>{d.label}</option>
+                                    ))}
+                                  </Select>
+                                </div>
+                                <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Notes" />
+                                <div className="flex gap-2">
+                                  <Button size="sm" onClick={() => saveEdit(mapping.id)}>Save</Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline">{mapping.area}</Badge>
+                                  {mapping.subArea && <Badge variant="secondary">{mapping.subArea}</Badge>}
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {mapping.treatment.type.replace(/_/g, ' ')} — {formatDate(mapping.treatment.treatmentDate)}
+                                </p>
+                                <div className="flex flex-wrap gap-4 mt-2 text-sm">
+                                  {mapping.units && <span>Units: <strong>{mapping.units}</strong></span>}
+                                  {mapping.volume && <span>Volume: <strong>{mapping.volume}mL</strong></span>}
+                                  {mapping.product && <span>Product: <strong>{mapping.product.name}</strong></span>}
+                                  {mapping.technique && <span>Technique: {mapping.technique}</span>}
+                                  {mapping.needleCannula && <span>Device: {mapping.needleCannula}</span>}
+                                  {mapping.depth && <span>Depth: {mapping.depth}</span>}
+                                </div>
+                                {mapping.notes && <p className="text-sm text-muted-foreground mt-1">{mapping.notes}</p>}
+                              </>
+                            )}
                           </div>
-                          <Button size="sm" variant="destructive" onClick={() => handleDelete(mapping.id)}>Delete</Button>
+                          {editingId !== mapping.id && (
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="outline" onClick={() => startEdit(mapping)}>
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </Button>
+                              <Button size="sm" variant="destructive" disabled={deletingId === mapping.id} onClick={() => handleDelete(mapping.id)}>
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -183,7 +183,6 @@ export default function TreatmentsPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Edit Treatment</h2>
-              <Button size="sm" variant="outline" onClick={() => setEditingTreatment(null)}>Cancel</Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">

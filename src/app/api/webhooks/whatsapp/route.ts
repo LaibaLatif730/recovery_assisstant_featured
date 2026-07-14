@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
-import { parseWhatsAppWebhook, sendWhatsAppMessage } from '@/lib/whatsapp'
+import { parseWhatsAppWebhook, sendWhatsAppMessage, verifyWhatsAppSignature } from '@/lib/whatsapp'
 import { analyzeWithGrok, compareWithPreviousAnalysis } from '@/lib/grok'
 import { resizeImage } from '@/lib/image-utils'
 import { put } from '@vercel/blob'
@@ -20,167 +20,190 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
+    const rawBody = await req.text()
+    const signature = req.headers.get('x-hub-signature-256')
+
+    if (!verifyWhatsAppSignature(rawBody, signature)) {
+      console.error('[SECURITY] Rejected WhatsApp webhook — invalid signature')
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 403 })
+    }
+
+    const body = JSON.parse(rawBody)
     const { messages } = parseWhatsAppWebhook(body)
 
     for (const message of messages) {
       if (message.type !== 'image') continue
 
-      const patientPhone = message.from
-      const whatsappMessageId = message.id
+      try {
+        const patientPhone = message.from
+        const whatsappMessageId = message.id
 
-      const patient = await prisma.patient.findFirst({
-        where: {
-          phone: { contains: patientPhone.replace(/\D/g, '').slice(-10) },
-          isActive: true,
-        },
-      })
+        const existingPhoto = await prisma.patientPhoto.findFirst({
+          where: { whatsappMessageId },
+          select: { id: true },
+        })
 
-      if (!patient) {
-        console.log(`No patient found for phone: ${patientPhone}`)
-        continue
-      }
+        if (existingPhoto) {
+          console.log(`Duplicate webhook delivery ignored — whatsappMessageId: ${whatsappMessageId}`)
+          continue
+        }
 
-      const pendingCheckIn = await prisma.recoveryCheckIn.findFirst({
-        where: {
-          patientId: patient.id,
-          status: { in: ['PENDING', 'SILENCE_RISK'] },
-        },
-        include: { treatment: { select: { type: true } } },
-        orderBy: { scheduledDate: 'desc' },
-      })
+        const normalizePhone = (s: string) => s.replace(/\D/g, '')
+        const normalizedIncoming = normalizePhone(patientPhone)
 
-      if (!pendingCheckIn) {
+        const patients = await prisma.patient.findMany({
+          where: { isActive: true },
+          select: { id: true, phone: true },
+        })
+
+        const patient = patients.find(p => p.phone && normalizePhone(p.phone) === normalizedIncoming)
+
+        if (!patient) {
+          console.log(`No patient found for phone: ${patientPhone}`)
+          continue
+        }
+
+        const pendingCheckIn = await prisma.recoveryCheckIn.findFirst({
+          where: {
+            patientId: patient.id,
+            status: { in: ['PENDING', 'SILENCE_RISK'] },
+          },
+          include: { treatment: { select: { type: true } } },
+          orderBy: { scheduledDate: 'desc' },
+        })
+
+        if (!pendingCheckIn) {
+          await sendWhatsAppMessage(patientPhone, {
+            messaging_product: 'whatsapp',
+            to: patientPhone,
+            type: 'text',
+            text: { body: 'Thank you for your photo! We currently don\'t have a pending check-in for you. We\'ll review your submission and get back to you shortly.' },
+          })
+          continue
+        }
+
         await sendWhatsAppMessage(patientPhone, {
           messaging_product: 'whatsapp',
           to: patientPhone,
           type: 'text',
-          text: { body: 'Thank you for your photo! We currently don\'t have a pending check-in for you. We\'ll review your submission and get back to you shortly.' },
+          text: { body: '📸 Photo received! Our AI is analyzing your recovery. We\'ll send you an update shortly.' },
         })
-        continue
-      }
 
-      await sendWhatsAppMessage(patientPhone, {
-        messaging_product: 'whatsapp',
-        to: patientPhone,
-        type: 'text',
-        text: { body: '📸 Photo received! Our AI is analyzing your recovery. We\'ll send you an update shortly.' },
-      })
-
-      const photoUrl = `https://graph.facebook.com/v18.0/${message.image?.id}`
-      const imageResponse = await fetch(photoUrl, {
-        headers: {
-          Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-        },
-      })
-
-      if (!imageResponse.ok) {
-        console.error('Failed to download WhatsApp image')
-        continue
-      }
-
-      const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
-      const blob = await put(`whatsapp/${Date.now()}-whatsapp.jpg`, imageBuffer, {
-        access: 'public',
-        contentType: 'image/jpeg',
-      })
-
-      const base64Image = await resizeImage(imageBuffer, 'image/jpeg')
-
-      const previousAnalysis = await prisma.aIAnalysis.findFirst({
-        where: { checkInId: pendingCheckIn.id },
-        orderBy: { analysisDate: 'desc' },
-        select: {
-          swellingScore: true,
-          bruisingScore: true,
-          rednessScore: true,
-          asymmetryScore: true,
-        },
-      })
-
-      const grokResult = await analyzeWithGrok(
-        base64Image,
-        'image/jpeg',
-        pendingCheckIn.treatment.type,
-        pendingCheckIn.dayNumber
-      )
-
-      let trendData = null
-      if (previousAnalysis) {
-        trendData = compareWithPreviousAnalysis(grokResult.clinicalFeatures, {
-          edema: previousAnalysis.swellingScore,
-          ecchymosis: previousAnalysis.bruisingScore,
-          erythema: previousAnalysis.rednessScore,
-          asymmetry: previousAnalysis.asymmetryScore,
+        const photoUrl = `https://graph.facebook.com/v18.0/${message.image?.id}`
+        const imageResponse = await fetch(photoUrl, {
+          headers: {
+            Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+          },
         })
-      }
 
-      const photo = await prisma.patientPhoto.create({
-        data: {
-          patientId: patient.id,
-          checkInId: pendingCheckIn.id,
-          imageUrl: blob.url,
-          source: 'WHATSAPP',
-          whatsappMessageId,
-          metadata: JSON.stringify({
-            source: 'whatsapp',
-            receivedAt: new Date().toISOString(),
-          }),
-        },
-      })
+        if (!imageResponse.ok) {
+          console.error('Failed to download WhatsApp image')
+          continue
+        }
 
-      const features = grokResult.clinicalFeatures
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+        const blob = await put(`whatsapp/${Date.now()}-whatsapp.jpg`, imageBuffer, {
+          access: 'public',
+          contentType: 'image/jpeg',
+        })
 
-      await prisma.aIAnalysis.create({
-        data: {
-          photoId: photo.id,
-          checkInId: pendingCheckIn.id,
-          swellingScore: features.edema,
-          bruisingScore: features.ecchymosis,
-          rednessScore: features.erythema,
-          asymmetryScore: features.asymmetry,
-          noduleScore: features.nodules,
-          vascularityScore: features.vascularity,
-          overallScore: (features.edema + features.ecchymosis + features.erythema + features.asymmetry) / 4,
-          confidenceScore: 0.8 + Math.random() * 0.15,
-          riskLevel: grokResult.riskLevel,
-          status: grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE' ? 'UNDER_REVIEW' : 'COMPLETED',
-          clinicalFeatures: JSON.stringify(features),
-          findings: JSON.stringify(grokResult.findings),
-          recommendations: JSON.stringify(grokResult.recommendations),
-          clinicalSummary: grokResult.clinicalSummary,
-          recommendedAction: grokResult.recommendedAction,
-          rawResponse: JSON.stringify({ grokResult }),
-          rationale: grokResult.rationale,
-          confidenceFactors: JSON.stringify(grokResult.confidenceFactors),
-          trendDirection: trendData?.trendDirection || null,
-          trendDetails: trendData ? JSON.stringify(trendData.trendDetails) : null,
-        },
-      })
+        const base64Image = await resizeImage(imageBuffer, 'image/jpeg')
 
-      const shouldEscalate = grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE'
-      const newStatus = shouldEscalate ? 'ESCALATED' : 'COMPLETED'
+        const previousAnalysis = await prisma.aIAnalysis.findFirst({
+          where: { checkInId: pendingCheckIn.id },
+          orderBy: { analysisDate: 'desc' },
+          select: {
+            swellingScore: true,
+            bruisingScore: true,
+            rednessScore: true,
+            asymmetryScore: true,
+          },
+        })
 
-      await prisma.recoveryCheckIn.update({
-        where: { id: pendingCheckIn.id },
-        data: {
-          status: newStatus,
-          aiResponse: grokResult.aiResponse,
-          riskLevel: grokResult.riskLevel,
-          completedDate: new Date(),
-        },
-      })
+        const grokResult = await analyzeWithGrok(
+          base64Image,
+          'image/jpeg',
+          pendingCheckIn.treatment.type,
+          pendingCheckIn.dayNumber
+        )
 
-      const riskEmoji = grokResult.riskLevel === 'RED' ? '🚨' :
-        grokResult.riskLevel === 'ORANGE' ? '⚠️' :
-        grokResult.riskLevel === 'YELLOW' ? '📋' : '✅'
+        let trendData = null
+        if (previousAnalysis) {
+          trendData = compareWithPreviousAnalysis(grokResult.clinicalFeatures, {
+            edema: previousAnalysis.swellingScore,
+            ecchymosis: previousAnalysis.bruisingScore,
+            erythema: previousAnalysis.rednessScore,
+            asymmetry: previousAnalysis.asymmetryScore,
+          })
+        }
 
-      await sendWhatsAppMessage(patientPhone, {
-        messaging_product: 'whatsapp',
-        to: patientPhone,
-        type: 'text',
-        text: {
-          body: `${riskEmoji} Recovery Check-in Complete
+        const features = grokResult.clinicalFeatures
+        const shouldEscalate = grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE'
+        const newStatus = shouldEscalate ? 'ESCALATED' : 'COMPLETED'
+
+        await prisma.$transaction(async (tx) => {
+          const photo = await tx.patientPhoto.create({
+            data: {
+              patientId: patient.id,
+              checkInId: pendingCheckIn.id,
+              imageUrl: blob.url,
+              source: 'WHATSAPP',
+              whatsappMessageId,
+              metadata: JSON.stringify({
+                source: 'whatsapp',
+                receivedAt: new Date().toISOString(),
+              }),
+            },
+          })
+
+          await tx.aIAnalysis.create({
+            data: {
+              photoId: photo.id,
+              checkInId: pendingCheckIn.id,
+              swellingScore: features.edema,
+              bruisingScore: features.ecchymosis,
+              rednessScore: features.erythema,
+              asymmetryScore: features.asymmetry,
+              noduleScore: features.nodules,
+              vascularityScore: features.vascularity,
+              overallScore: (features.edema + features.ecchymosis + features.erythema + features.asymmetry) / 4,
+              confidenceScore: grokResult.confidenceScore,
+              riskLevel: grokResult.riskLevel,
+              status: grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE' ? 'UNDER_REVIEW' : 'COMPLETED',
+              clinicalFeatures: JSON.stringify(features),
+              findings: JSON.stringify(grokResult.findings),
+              recommendations: JSON.stringify(grokResult.recommendations),
+              clinicalSummary: grokResult.clinicalSummary,
+              recommendedAction: grokResult.recommendedAction,
+              rawResponse: JSON.stringify({ grokResult }),
+              rationale: grokResult.rationale,
+              confidenceFactors: JSON.stringify(grokResult.confidenceFactors),
+              trendDirection: trendData?.trendDirection || null,
+              trendDetails: trendData ? JSON.stringify(trendData.trendDetails) : null,
+            },
+          })
+
+          await tx.recoveryCheckIn.update({
+            where: { id: pendingCheckIn.id },
+            data: {
+              status: newStatus,
+              aiResponse: grokResult.aiResponse,
+              riskLevel: grokResult.riskLevel,
+              completedDate: new Date(),
+            },
+          })
+        })
+
+        const riskEmoji = grokResult.riskLevel === 'RED' ? '🚨' :
+          grokResult.riskLevel === 'ORANGE' ? '⚠️' :
+          grokResult.riskLevel === 'YELLOW' ? '📋' : '✅'
+
+        await sendWhatsAppMessage(patientPhone, {
+          messaging_product: 'whatsapp',
+          to: patientPhone,
+          type: 'text',
+          text: {
+            body: `${riskEmoji} Recovery Check-in Complete
 
 Status: ${grokResult.riskLevel}
 ${grokResult.clinicalSummary}
@@ -193,8 +216,12 @@ ${shouldEscalate ? '\n⚡ Our team will contact you shortly.' : '\n✅ Continue 
 
 Thank you!
 AI Clinic Assistant`
-        },
-      })
+          },
+        })
+      } catch (msgError) {
+        console.error(`[WHATSAPP] Failed to process message ${message.id}:`, msgError)
+        continue
+      }
     }
 
     return NextResponse.json({ status: 'ok' })

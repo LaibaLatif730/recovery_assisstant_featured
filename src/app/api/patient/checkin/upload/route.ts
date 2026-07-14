@@ -3,23 +3,24 @@ import prisma from '@/lib/db'
 import { put } from '@vercel/blob'
 import { analyzeWithGrok, compareWithPreviousAnalysis } from '@/lib/grok'
 import { resizeImage } from '@/lib/image-utils'
+import { requirePatientAuth } from '@/lib/patient-auth'
 
 export async function POST(req: Request) {
   try {
+    const { patientId } = await requirePatientAuth()
     const formData = await req.formData()
     const file = formData.get('photo') as File
     const checkInId = formData.get('checkInId') as string
-    const patientId = formData.get('patientId') as string
     const message = formData.get('message') as string
 
-    if (!file || !checkInId || !patientId) {
+    if (!file || !checkInId) {
       return NextResponse.json(
-        { error: 'Photo, check-in ID, and patient ID are required' },
+        { error: 'Photo and check-in ID are required' },
         { status: 400 }
       )
     }
 
-    if (!/^c[a-z0-9]{24,}$/.test(checkInId) || !/^c[a-z0-9]{24,}$/.test(patientId)) {
+    if (!/^c[a-z0-9]{24,}$/.test(checkInId)) {
       return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 })
     }
 
@@ -30,14 +31,6 @@ export async function POST(req: Request) {
 
     if (!checkIn || checkIn.patientId !== patientId) {
       return NextResponse.json({ error: 'Check-in not found or does not belong to this patient' }, { status: 404 })
-    }
-
-    const patient = await prisma.patient.findUnique({
-      where: { id: patientId, isActive: true },
-    })
-
-    if (!patient) {
-      return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
     }
 
     const bytes = await file.arrayBuffer()
@@ -81,96 +74,92 @@ export async function POST(req: Request) {
     }
 
     const features = grokResult.clinicalFeatures
-
-    const photo = await prisma.patientPhoto.create({
-      data: {
-        patientId,
-        checkInId,
-        imageUrl: imageUrl,
-        source: 'PORTAL',
-        metadata: JSON.stringify({
-          originalName: file.name,
-          size: file.size,
-          type: file.type,
-          grokLabels: grokResult.labels,
-        }),
-      },
-    })
-
-    const aiAnalysis = await prisma.aIAnalysis.create({
-      data: {
-        photoId: photo.id,
-        checkInId,
-        swellingScore: features.edema,
-        bruisingScore: features.ecchymosis,
-        rednessScore: features.erythema,
-        asymmetryScore: features.asymmetry,
-        noduleScore: features.nodules,
-        vascularityScore: features.vascularity,
-        overallScore: (features.edema + features.ecchymosis + features.erythema + features.asymmetry) / 4,
-        confidenceScore: 0.8 + Math.random() * 0.15,
-        riskLevel: grokResult.riskLevel,
-        status: grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE' ? 'UNDER_REVIEW' : 'COMPLETED',
-        clinicalFeatures: JSON.stringify(features),
-        findings: JSON.stringify(grokResult.findings),
-        recommendations: JSON.stringify(grokResult.recommendations),
-        clinicalSummary: grokResult.clinicalSummary,
-        recommendedAction: grokResult.recommendedAction,
-        rawResponse: JSON.stringify({ grokResult }),
-        rationale: grokResult.rationale,
-        confidenceFactors: JSON.stringify(grokResult.confidenceFactors),
-        trendDirection: trendData?.trendDirection || null,
-        trendDetails: trendData ? JSON.stringify(trendData.trendDetails) : null,
-      },
-    })
-
-    const shouldEscalate = grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE'
+    const shouldEscalate = grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE' || grokResult.aiUnavailable
     const newStatus = shouldEscalate ? 'ESCALATED' : 'COMPLETED'
 
-    await prisma.recoveryCheckIn.update({
-      where: { id: checkInId },
-      data: {
-        status: newStatus,
-        patientMessage: message || undefined,
-        aiResponse: grokResult.aiResponse,
-        riskLevel: grokResult.riskLevel,
-        completedDate: new Date(),
-      },
-    })
-
-    let nextCheckIn = null
     let nextCheckInHours: number | null = null
+    if (grokResult.riskLevel === 'YELLOW') nextCheckInHours = 24
+    else if (grokResult.riskLevel === 'ORANGE') nextCheckInHours = 4
+    else if (grokResult.riskLevel === 'RED') nextCheckInHours = 1
 
-    if (grokResult.riskLevel === 'YELLOW') {
-      nextCheckInHours = 24
-    } else if (grokResult.riskLevel === 'ORANGE') {
-      nextCheckInHours = 4
-    } else if (grokResult.riskLevel === 'RED') {
-      nextCheckInHours = 1
-    }
-
-    if (nextCheckInHours) {
-      const currentCheckIn = await prisma.recoveryCheckIn.findUnique({
-        where: { id: checkInId },
-        select: { treatmentId: true, patientId: true, dayNumber: true },
+    const { photo, aiAnalysis, nextCheckIn } = await prisma.$transaction(async (tx) => {
+      const photo = await tx.patientPhoto.create({
+        data: {
+          patientId,
+          checkInId,
+          imageUrl: imageUrl,
+          source: 'PORTAL',
+          metadata: JSON.stringify({
+            originalName: file.name,
+            size: file.size,
+            type: file.type,
+            grokLabels: grokResult.labels,
+          }),
+        },
       })
 
-      if (currentCheckIn) {
-        const nextDate = new Date()
-        nextDate.setHours(nextDate.getHours() + nextCheckInHours)
+      const aiAnalysis = await tx.aIAnalysis.create({
+        data: {
+          photoId: photo.id,
+          checkInId,
+          swellingScore: features.edema,
+          bruisingScore: features.ecchymosis,
+          rednessScore: features.erythema,
+          asymmetryScore: features.asymmetry,
+          noduleScore: features.nodules,
+          vascularityScore: features.vascularity,
+          overallScore: (features.edema + features.ecchymosis + features.erythema + features.asymmetry) / 4,
+          confidenceScore: grokResult.confidenceScore,
+          riskLevel: grokResult.riskLevel,
+          status: grokResult.riskLevel === 'RED' || grokResult.riskLevel === 'ORANGE' ? 'UNDER_REVIEW' : 'COMPLETED',
+          clinicalFeatures: JSON.stringify(features),
+          findings: JSON.stringify(grokResult.findings),
+          recommendations: JSON.stringify(grokResult.recommendations),
+          clinicalSummary: grokResult.clinicalSummary,
+          recommendedAction: grokResult.recommendedAction,
+          rawResponse: JSON.stringify({ grokResult }),
+          rationale: grokResult.rationale,
+          confidenceFactors: JSON.stringify(grokResult.confidenceFactors),
+          trendDirection: trendData?.trendDirection || null,
+          trendDetails: trendData ? JSON.stringify(trendData.trendDetails) : null,
+        },
+      })
 
-        nextCheckIn = await prisma.recoveryCheckIn.create({
-          data: {
-            treatmentId: currentCheckIn.treatmentId,
-            patientId: currentCheckIn.patientId,
-            dayNumber: currentCheckIn.dayNumber + 1,
-            scheduledDate: nextDate,
-            status: 'PENDING',
-            riskLevel: 'GREEN',
-          },
+      await tx.recoveryCheckIn.update({
+        where: { id: checkInId },
+        data: {
+          status: newStatus,
+          patientMessage: message || undefined,
+          aiResponse: grokResult.aiResponse,
+          riskLevel: grokResult.riskLevel,
+          completedDate: new Date(),
+        },
+      })
+
+      let nextCheckIn = null
+      if (nextCheckInHours) {
+        const currentCheckIn = await tx.recoveryCheckIn.findUnique({
+          where: { id: checkInId },
+          select: { treatmentId: true, patientId: true, dayNumber: true },
         })
+        if (currentCheckIn) {
+          const nextDate = new Date()
+          nextDate.setHours(nextDate.getHours() + nextCheckInHours)
+          nextCheckIn = await tx.recoveryCheckIn.create({
+            data: {
+              treatmentId: currentCheckIn.treatmentId,
+              patientId: currentCheckIn.patientId,
+              dayNumber: currentCheckIn.dayNumber + 1,
+              scheduledDate: nextDate,
+              status: 'PENDING',
+              riskLevel: 'GREEN',
+            },
+          })
+        }
       }
-    }
+
+      return { photo, aiAnalysis, nextCheckIn }
+    })
 
     return NextResponse.json({
       photo,
@@ -183,6 +172,8 @@ export async function POST(req: Request) {
       recommendedAction: grokResult.recommendedAction,
       rationale: grokResult.rationale,
       confidenceFactors: grokResult.confidenceFactors,
+      aiUnavailable: grokResult.aiUnavailable || false,
+      aiFailureReason: grokResult.aiFailureReason || null,
       trendDirection: trendData?.trendDirection || null,
       trendDetails: trendData?.trendDetails || null,
       nextCheckIn,
@@ -191,9 +182,10 @@ export async function POST(req: Request) {
       disclaimer: 'This analysis is generated by AI clinical decision support system and should not replace professional medical advice. Always consult your healthcare provider for clinical decisions.',
     }, { status: 201 })
   } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     console.error('Error uploading photo:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Error details:', message)
-    return NextResponse.json({ error: 'Internal server error: ' + message }, { status: 500 })
+    return NextResponse.json({ error: 'Photo upload failed' }, { status: 500 })
   }
 }

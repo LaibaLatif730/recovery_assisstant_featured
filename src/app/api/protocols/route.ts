@@ -46,3 +46,35 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (session.user.role !== 'ADMIN' && session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const protocol = await prisma.treatmentProtocol.create({
+      data: {
+        procedureType: body.procedureType,
+        category: body.category || 'INJECTABLE',
+        substance: body.substance || undefined,
+        typicalVolumes: body.typicalVolumes || undefined,
+        recoveryTimeline: body.recoveryTimeline || '',
+        normalSymptoms: body.normalSymptoms || '[]',
+        warningSigns: body.warningSigns || '[]',
+        emergencySigns: body.emergencySigns || '[]',
+        followUpSchedule: body.followUpSchedule || '[]',
+        contraindications: body.contraindications || '[]',
+        postProcedureInstructions: body.postProcedureInstructions || '[]',
+      },
+    })
+
+    return NextResponse.json(protocol, { status: 201 })
+  } catch (error) {
+    console.error('Error creating protocol:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

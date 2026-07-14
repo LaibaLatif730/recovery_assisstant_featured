@@ -1,22 +1,31 @@
 import { NextResponse } from 'next/server'
 import { detectSilenceRisks, getSilenceRiskStats } from '@/lib/silence-risk'
+import { sendWhatsAppMessage } from '@/lib/whatsapp'
 import prisma from '@/lib/db'
+
+function verifyCronAuth(req: Request): boolean {
+  const secret = process.env.CRON_SECRET
+  if (!secret) {
+    console.error('[SECURITY] CRON_SECRET not configured — rejecting request')
+    return false
+  }
+  const authHeader = req.headers.get('authorization')
+  return authHeader === `Bearer ${secret}`
+}
 
 export async function POST(req: Request) {
   try {
-    const authHeader = req.headers.get('authorization')
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!verifyCronAuth(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const results = await detectSilenceRisks()
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true },
+    })
 
     for (const result of results) {
-      const admins = await prisma.user.findMany({
-        where: { role: 'ADMIN' },
-        select: { id: true },
-      })
-
       for (const admin of admins) {
         await prisma.notification.create({
           data: {
@@ -33,6 +42,42 @@ export async function POST(req: Request) {
           },
         })
       }
+
+      if (result.escalationLevel === 'HIGH' || result.escalationLevel === 'CRITICAL') {
+        const patient = await prisma.patient.findUnique({
+          where: { id: result.patientId || '' },
+          select: { phone: true, firstName: true, lastName: true },
+        })
+
+        if (patient?.phone) {
+          await sendWhatsAppMessage(patient.phone, {
+            messaging_product: 'whatsapp',
+            to: patient.phone,
+            type: 'text',
+            text: {
+              body: `Hi ${patient.firstName}, this is a reminder for your Day ${result.missedDayNumber} recovery check-in for your ${result.treatmentType.replace(/_/g, ' ')} treatment. Please reply with a photo of the treated area so we can monitor your recovery.`,
+            },
+          })
+        }
+
+        const staff = await prisma.user.findMany({
+          where: { role: { in: ['ADMIN', 'DOCTOR'] } },
+          select: { phone: true, name: true },
+        })
+
+        for (const s of staff) {
+          if (s.phone) {
+            await sendWhatsAppMessage(s.phone, {
+              messaging_product: 'whatsapp',
+              to: s.phone,
+              type: 'text',
+              text: {
+                body: `${result.escalationLevel === 'CRITICAL' ? '🚨' : '⚠️'} ${result.escalationLevel} SILENCE RISK\n\nPatient: ${result.patientName}\nTreatment: ${result.treatmentType.replace(/_/g, ' ')}\nDay ${result.missedDayNumber} — ${result.hoursPastDue}h overdue\n\nPlease review in the dashboard.`,
+              },
+            })
+          }
+        }
+      }
     }
 
     return NextResponse.json({
@@ -45,8 +90,11 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    if (!verifyCronAuth(req)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const stats = await getSilenceRiskStats()
     return NextResponse.json(stats)
   } catch (error) {

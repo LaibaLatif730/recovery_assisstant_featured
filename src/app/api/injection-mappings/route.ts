@@ -104,3 +104,43 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const body = await req.json()
+    const { id, ...updateData } = body
+
+    if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
+
+    const mapping = await prisma.injectionMapping.update({
+      where: { id },
+      data: {
+        area: updateData.area || undefined,
+        subArea: updateData.subArea || undefined,
+        units: updateData.units !== undefined ? parseFloat(updateData.units) || null : undefined,
+        volume: updateData.volume !== undefined ? parseFloat(updateData.volume) || null : undefined,
+        technique: updateData.technique || undefined,
+        needleCannula: updateData.needleCannula || undefined,
+        depth: updateData.depth || undefined,
+        aspiration: updateData.aspiration || undefined,
+        notes: updateData.notes || undefined,
+        productId: updateData.productId || undefined,
+        batchId: updateData.batchId || undefined,
+      },
+      include: {
+        treatment: { select: { id: true, type: true, treatmentDate: true } },
+        doctor: { include: { user: { select: { name: true } } } },
+        product: { select: { id: true, name: true } },
+        batch: { select: { id: true, batchNumber: true } },
+      },
+    })
+
+    return NextResponse.json(mapping)
+  } catch (error) {
+    console.error('Error updating injection mapping:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
