@@ -36,6 +36,7 @@ export default function ClinicalNotesPage() {
   const [patients, setPatients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showAIGenerator, setShowAIGenerator] = useState(false)
   const [filter, setFilter] = useState('')
   const [form, setForm] = useState({
     patientId: '',
@@ -44,6 +45,9 @@ export default function ClinicalNotesPage() {
     content: '',
     isPrivate: false,
   })
+  const [aiForm, setAiForm] = useState({ patientId: '', consultationNotes: '', treatmentType: 'BOTOX' })
+  const [aiResult, setAiResult] = useState('')
+  const [generating, setGenerating] = useState(false)
   const [formError, setFormError] = useState('')
   const { validate, getFieldError } = useZodForm(clinicalNoteSchema)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -155,6 +159,53 @@ export default function ClinicalNotesPage() {
     }
   }
 
+  const handleGenerateSOAP = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGenerating(true)
+    setAiResult('')
+    try {
+      const res = await fetch('/api/ai/soap-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiForm),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setAiResult(data.soapNotes)
+      } else {
+        setAiResult('Error: ' + (data.error || 'Failed to generate'))
+      }
+    } catch {
+      setAiResult('Error generating SOAP notes')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleApproveSOAP = async () => {
+    try {
+      const res = await fetch('/api/clinical-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: aiForm.patientId,
+          noteType: 'SOAP',
+          content: aiResult,
+          isAiGenerated: true,
+          isPrivate: true,
+        }),
+      })
+      if (res.ok) {
+        setAiResult('')
+        setShowAIGenerator(false)
+        setAiForm({ patientId: '', consultationNotes: '', treatmentType: 'BOTOX' })
+        fetchNotes()
+      }
+    } catch (error) {
+      console.error('Error saving SOAP note:', error)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -162,10 +213,88 @@ export default function ClinicalNotesPage() {
           <h1 className="text-2xl font-bold text-white">Clinical Notes</h1>
           <p className="text-muted-foreground">SOAP notes, procedure documentation, and clinical records</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Cancel' : '+ New Note'}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setShowAIGenerator(!showAIGenerator); setShowForm(false) }}>
+            {showAIGenerator ? 'Cancel' : 'AI SOAP Generator'}
+          </Button>
+          <Button onClick={() => { setShowForm(!showForm); setShowAIGenerator(false) }}>
+            {showForm ? 'Cancel' : '+ New Note'}
+          </Button>
+        </div>
       </div>
+
+      {showAIGenerator && (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI SOAP Note Generator</CardTitle>
+            <CardDescription>Enter consultation notes and AI will generate a structured SOAP note for your review</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleGenerateSOAP} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Patient *</label>
+                  <select
+                    value={aiForm.patientId}
+                    onChange={(e) => setAiForm({ ...aiForm, patientId: e.target.value })}
+                    className="w-full p-2 rounded-lg border bg-background"
+                    required
+                  >
+                    <option value="">Select patient</option>
+                    {patients.map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Treatment Type</label>
+                  <select
+                    value={aiForm.treatmentType}
+                    onChange={(e) => setAiForm({ ...aiForm, treatmentType: e.target.value })}
+                    className="w-full p-2 rounded-lg border bg-background"
+                  >
+                    <option value="BOTOX">Botox</option>
+                    <option value="FILLER_HYALURONIC">Hyaluronic Acid Filler</option>
+                    <option value="FILLER_CALCIUM_HYDROXYLAPATITE">Calcium Hydroxylapatite Filler</option>
+                    <option value="MESOTHERAPY">Mesotherapy</option>
+                    <option value="PRP">PRP</option>
+                    <option value="SKIN_BOOSTER">Skin Booster</option>
+                    <option value="MICRONEEDLING">Microneedling</option>
+                    <option value="PDO_THREADS">PDO Threads</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Consultation Notes *</label>
+                <textarea
+                  value={aiForm.consultationNotes}
+                  onChange={(e) => setAiForm({ ...aiForm, consultationNotes: e.target.value })}
+                  placeholder="Describe what was discussed/observed during the consultation... (e.g., Patient presented for Botox treatment. Areas treated: forehead, glabella. 20 units total. No adverse reactions during procedure.)"
+                  className="w-full p-3 rounded-lg border bg-background min-h-[120px]"
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={generating || !aiForm.patientId || !aiForm.consultationNotes}>
+                {generating ? 'Generating...' : 'Generate SOAP Note'}
+              </Button>
+            </form>
+
+            {aiResult && (
+              <div className="mt-4 space-y-3">
+                <div className="p-4 rounded-lg bg-muted/50 border">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">AI-Generated SOAP Note (Review before saving)</p>
+                  <pre className="whitespace-pre-wrap text-sm">{aiResult}</pre>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleApproveSOAP} size="sm">Approve & Save</Button>
+                  <Button variant="outline" onClick={() => setAiResult('')} size="sm">Discard</Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {showForm && (
         <Card>

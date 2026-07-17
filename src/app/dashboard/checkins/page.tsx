@@ -58,9 +58,20 @@ export default function CheckInsPage() {
 
   const fetchSilenceStats = async () => {
     try {
-      const res = await fetch('/api/cron/check-silence')
+      const res = await fetch('/api/checkins?status=SILENCE_RISK')
       const data = await res.json()
-      setSilenceStats(data)
+      if (Array.isArray(data)) {
+        const byLevel: Record<string, number> = {}
+        data.forEach((r: any) => {
+          byLevel[r.riskLevel] = (byLevel[r.riskLevel] || 0) + 1
+        })
+        setSilenceStats({
+          active: data,
+          last24h: data.length,
+          lastWeek: data.length,
+          byLevel,
+        })
+      }
     } catch (error) {
       console.error('Error fetching silence stats:', error)
     }
@@ -69,7 +80,7 @@ export default function CheckInsPage() {
   const runSilenceCheck = async () => {
     setCheckingSilence(true)
     try {
-      const res = await fetch('/api/cron/check-silence', { method: 'POST' })
+      const res = await fetch('/api/checkins/run-silence-check', { method: 'POST' })
       const data = await res.json()
       if (data.detected > 0) {
         fetchCheckIns()

@@ -31,6 +31,7 @@ export default function NewTreatmentPage() {
     treatmentDate: new Date().toISOString().split('T')[0],
     notes: '',
     aftercareNotes: '',
+    numberOfCheckIns: '5',
   })
   const { validate, getFieldError } = useZodForm(treatmentSchema)
 
@@ -65,6 +66,7 @@ export default function NewTreatmentPage() {
         body: JSON.stringify({
           ...form,
           units: form.units ? parseFloat(form.units) : undefined,
+          numberOfCheckIns: parseInt(form.numberOfCheckIns) || 5,
         }),
       })
 
@@ -216,6 +218,19 @@ export default function NewTreatmentPage() {
                 maxLength={1000}
               />
               <FieldError error={getFieldError('aftercareNotes')} />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Number of Check-ins</label>
+              <Input
+                type="number"
+                min="0"
+                max="30"
+                value={form.numberOfCheckIns}
+                onChange={(e) => setForm({ ...form, numberOfCheckIns: e.target.value })}
+                placeholder="How many follow-up check-ins?"
+              />
+              <p className="text-xs text-muted-foreground">Set to 0 if no check-ins needed. Doctor can add more later.</p>
             </div>
 
             <div className="flex gap-4 pt-4">

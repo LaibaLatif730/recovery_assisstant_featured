@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
-import { verifyPin, setPatientSessionCookie } from '@/lib/patient-auth'
-
-function normalize(s: string) {
-  return s.replace(/[^0-9]/g, '')
-}
+import bcrypt from 'bcryptjs'
+import { setPatientSessionCookie } from '@/lib/patient-auth'
 
 const attempts = new Map<string, { count: number; resetAt: number }>()
 const MAX_ATTEMPTS = 5
@@ -30,41 +27,33 @@ function checkRateLimit(key: string): boolean {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { phone, pin } = body
+    const { email, password } = body
 
-    if (!phone) {
-      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
+    if (!email || !password) {
+      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
     }
 
-    const normalizedPhone = normalize(phone)
+    const normalizedEmail = email.toLowerCase().trim()
 
-    if (!checkRateLimit(normalizedPhone)) {
+    if (!checkRateLimit(normalizedEmail)) {
       return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 })
     }
 
-    if (!pin) {
-      return NextResponse.json({ error: 'PIN is required' }, { status: 400 })
-    }
-
     const patient = await prisma.patient.findFirst({
-      where: { isActive: true, phone: { contains: normalizedPhone.slice(-10) } },
-      select: { id: true, firstName: true, lastName: true, phone: true, pinHash: true, pinSetAt: true },
+      where: { isActive: true, email: normalizedEmail },
+      select: { id: true, firstName: true, lastName: true, email: true, passwordHash: true },
     })
 
-    if (!patient) {
+    if (!patient || !patient.passwordHash) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    if (!patient.pinHash) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
-    }
-
-    const valid = await verifyPin(pin, patient.pinHash)
+    const valid = await bcrypt.compare(password, patient.passwordHash)
     if (!valid) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    attempts.delete(normalizedPhone)
+    attempts.delete(normalizedEmail)
 
     await setPatientSessionCookie(patient.id)
 

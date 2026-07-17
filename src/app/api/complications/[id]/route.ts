@@ -6,6 +6,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     const session = await requireAuth()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can update complications' }, { status: 403 })
+    }
 
     const { id } = await params
     const body = await req.json()
@@ -34,6 +37,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     const session = await requireAuth()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can delete complications' }, { status: 403 })
+    }
 
     const { id } = await params
 

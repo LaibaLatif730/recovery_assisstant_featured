@@ -44,6 +44,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can create clinical notes' }, { status: 403 })
+    }
+
     const body = await req.json()
     const validatedData = clinicalNoteSchema.parse(body)
 
@@ -77,6 +81,10 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can update clinical notes' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { id, ...updateData } = body
 
@@ -106,6 +114,10 @@ export async function DELETE(req: Request) {
     const session = await requireAuth()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can delete clinical notes' }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)

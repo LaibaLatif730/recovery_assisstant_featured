@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { treatmentSchema } from '@/lib/validators'
-import { getRecoveryTimeline } from '@/lib/utils'
 import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(req: Request) {
@@ -44,8 +43,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can create treatments' }, { status: 403 })
+    }
+
     const body = await req.json()
     const validatedData = treatmentSchema.parse(body)
+    const numberOfCheckIns = Math.min(Math.max(parseInt(body.numberOfCheckIns) || 5, 0), 30)
 
     let injectionAreasStr = '[]'
     if (validatedData.injectionAreas) {
@@ -73,21 +77,24 @@ export async function POST(req: Request) {
       },
     })
 
-    const timeline = getRecoveryTimeline(treatment.type)
     const treatmentDate = new Date(validatedData.treatmentDate)
 
-    const checkIns = await Promise.all(
-      timeline.map((dayNumber) =>
-        prisma.recoveryCheckIn.create({
-          data: {
-            treatmentId: treatment.id,
-            patientId: validatedData.patientId,
-            dayNumber,
-            scheduledDate: new Date(treatmentDate.getTime() + dayNumber * 24 * 60 * 60 * 1000),
-          },
+    let checkIns: any[] = []
+    if (numberOfCheckIns > 0) {
+      checkIns = await Promise.all(
+        Array.from({ length: numberOfCheckIns }, (_, i) => {
+          const dayNumber = i + 1
+          return prisma.recoveryCheckIn.create({
+            data: {
+              treatmentId: treatment.id,
+              patientId: validatedData.patientId,
+              dayNumber,
+              scheduledDate: new Date(treatmentDate.getTime() + dayNumber * 24 * 60 * 60 * 1000),
+            },
+          })
         })
       )
-    )
+    }
 
     return NextResponse.json(
       { ...treatment, checkIns },
@@ -104,6 +111,10 @@ export async function PATCH(req: Request) {
     const session = await requireAuth()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can update treatments' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -139,6 +150,10 @@ export async function DELETE(req: Request) {
     const session = await requireAuth()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can delete treatments' }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)

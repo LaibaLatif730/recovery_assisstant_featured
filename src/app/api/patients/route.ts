@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { patientSchema } from '@/lib/validators'
 import { requireAuth } from '@/lib/api-auth'
+import { auditLog } from '@/lib/audit-log'
+import bcrypt from 'bcryptjs'
 
 export async function GET(req: Request) {
   try {
@@ -51,12 +53,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Only admins can create patients' }, { status: 403 })
+    if (session.user.role !== 'DOCTOR' && session.user.role !== 'RECEPTIONIST') {
+      return NextResponse.json({ error: 'Only doctors and receptionists can create patients' }, { status: 403 })
     }
 
     const body = await req.json()
     const validatedData = patientSchema.parse(body)
+    const { initialPassword, ...patientData } = body
 
     let medicalHistory = undefined
     if (validatedData.medicalHistory) {
@@ -65,6 +68,13 @@ export async function POST(req: Request) {
       } catch {
         medicalHistory = validatedData.medicalHistory
       }
+    }
+
+    let passwordHash = undefined
+    let passwordSetAt = undefined
+    if (initialPassword && initialPassword.length >= 6) {
+      passwordHash = await bcrypt.hash(initialPassword, 12)
+      passwordSetAt = new Date()
     }
 
     const patient = await prisma.patient.create({
@@ -83,7 +93,17 @@ export async function POST(req: Request) {
         clinicId: validatedData.clinicId || undefined,
         consentGiven: true,
         consentDate: new Date(),
+        passwordHash,
+        passwordSetAt,
       },
+    })
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'CREATE_PATIENT',
+      entity: 'Patient',
+      entityId: patient.id,
+      newValues: { firstName: patient.firstName, lastName: patient.lastName, phone: patient.phone },
     })
 
     return NextResponse.json(patient, { status: 201 })

@@ -45,6 +45,9 @@ export async function POST(req: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can create complications' }, { status: 403 })
+    }
 
     const body = await req.json()
     const validatedData = complicationSchema.parse(body)
@@ -81,6 +84,9 @@ export async function PATCH(req: Request) {
     const session = await requireAuth()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can update complications' }, { status: 403 })
     }
 
     const body = await req.json()

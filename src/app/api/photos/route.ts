@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
 
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+const MAX_SIZE = 10 * 1024 * 1024
+
 export async function GET(req: Request) {
   try {
     const session = await requireAuth()
@@ -47,6 +50,20 @@ export async function POST(req: Request) {
     if (!file || !patientId) {
       return NextResponse.json(
         { error: 'File and patientId are required' },
+        { status: 400 }
+      )
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { error: 'Invalid file type. Allowed: JPEG, PNG, WebP, HEIC' },
+        { status: 400 }
+      )
+    }
+
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json(
+        { error: 'File too large. Maximum size is 10MB' },
         { status: 400 }
       )
     }

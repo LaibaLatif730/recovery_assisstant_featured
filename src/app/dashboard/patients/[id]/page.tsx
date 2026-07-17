@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
 
 interface InjectionMapping {
@@ -63,9 +64,16 @@ export default function PatientDetailPage() {
     dateOfBirth: '', address: '', medicalHistory: '', allergies: '',
     medications: '', emergencyContact: '',
   })
+  const [userRole, setUserRole] = useState('')
+  const [showCheckinForm, setShowCheckinForm] = useState(false)
+  const [checkinForm, setCheckinForm] = useState({ numberOfCheckIns: '5', intervalDays: '1', startDate: '', notes: '' })
+  const [creatingCheckins, setCreatingCheckins] = useState(false)
+  const [patientSummary, setPatientSummary] = useState('')
+  const [loadingSummary, setLoadingSummary] = useState(false)
 
   useEffect(() => {
     fetchPatient()
+    fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => { if (d?.role) setUserRole(d.role) })
   }, [params.id])
 
   const fetchPatient = async () => {
@@ -77,6 +85,46 @@ export default function PatientDetailPage() {
       console.error('Error fetching patient:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchPatientSummary = async () => {
+    setLoadingSummary(true)
+    try {
+      const res = await fetch(`/api/ai/patient-summary?patientId=${params.id}`)
+      const data = await res.json()
+      if (res.ok) setPatientSummary(data.summary)
+    } catch (error) {
+      console.error('Error fetching summary:', error)
+    } finally {
+      setLoadingSummary(false)
+    }
+  }
+
+  const handleCreateCheckins = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setCreatingCheckins(true)
+    try {
+      const res = await fetch('/api/checkins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: params.id,
+          numberOfCheckIns: parseInt(checkinForm.numberOfCheckIns),
+          intervalDays: parseInt(checkinForm.intervalDays),
+          startDate: checkinForm.startDate || undefined,
+          notes: checkinForm.notes || undefined,
+        }),
+      })
+      if (res.ok) {
+        setShowCheckinForm(false)
+        setCheckinForm({ numberOfCheckIns: '5', intervalDays: '1', startDate: '', notes: '' })
+        fetchPatient()
+      }
+    } catch (error) {
+      console.error('Error creating check-ins:', error)
+    } finally {
+      setCreatingCheckins(false)
     }
   }
 
@@ -187,7 +235,28 @@ export default function PatientDetailPage() {
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-6">
+          {userRole === 'DOCTOR' && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>AI Patient Summary</CardTitle>
+                  <CardDescription>Quick clinical overview for this patient</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={fetchPatientSummary} disabled={loadingSummary}>
+                  {loadingSummary ? 'Generating...' : patientSummary ? 'Refresh' : 'Generate Summary'}
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {patientSummary ? (
+                  <p className="text-sm">{patientSummary}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Click "Generate Summary" to get an AI-generated clinical overview of this patient's history, treatments, and risk flags.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
@@ -301,6 +370,7 @@ export default function PatientDetailPage() {
             </CardContent>
           </Card>
         </div>
+        </div>
       )}
 
       {/* Clinical Timeline Tab */}
@@ -400,16 +470,72 @@ export default function PatientDetailPage() {
       {/* Check-ins Tab */}
       {activeTab === 'checkins' && (
         <Card>
-          <CardHeader>
-            <CardTitle>Recovery Check-ins</CardTitle>
-            <CardDescription>Recovery monitoring status</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Recovery Check-ins</CardTitle>
+              <CardDescription>Recovery monitoring status</CardDescription>
+            </div>
+            {userRole === 'DOCTOR' && (
+              <Button size="sm" onClick={() => setShowCheckinForm(!showCheckinForm)}>
+                {showCheckinForm ? 'Cancel' : '+ Add Check-ins'}
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
+            {showCheckinForm && (
+              <form onSubmit={handleCreateCheckins} className="mb-6 p-4 border rounded-lg space-y-4 bg-muted/50">
+                <p className="text-sm font-medium">Create check-ins for this patient</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Number of check-ins</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={checkinForm.numberOfCheckIns}
+                      onChange={(e) => setCheckinForm({ ...checkinForm, numberOfCheckIns: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Interval (days between)</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={checkinForm.intervalDays}
+                      onChange={(e) => setCheckinForm({ ...checkinForm, intervalDays: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Start date</label>
+                    <Input
+                      type="date"
+                      value={checkinForm.startDate}
+                      onChange={(e) => setCheckinForm({ ...checkinForm, startDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Notes (optional)</label>
+                  <Input
+                    value={checkinForm.notes}
+                    onChange={(e) => setCheckinForm({ ...checkinForm, notes: e.target.value })}
+                    placeholder="Reason for check-ins..."
+                  />
+                </div>
+                <Button type="submit" size="sm" disabled={creatingCheckins}>
+                  {creatingCheckins ? 'Creating...' : 'Create Check-ins'}
+                </Button>
+              </form>
+            )}
+
             {patient.checkIns.length === 0 ? (
               <p className="text-center py-4 text-muted-foreground">No check-ins scheduled</p>
             ) : (
               <div className="space-y-3">
-                {patient.checkIns.slice(0, 10).map((checkIn) => (
+                {patient.checkIns.slice(0, 20).map((checkIn) => (
                   <div key={checkIn.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
                       <p className="font-medium">Day {checkIn.dayNumber} Check-in</p>

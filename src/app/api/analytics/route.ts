@@ -9,84 +9,215 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(req.url)
-    const clinicId = searchParams.get('clinicId')
-    const period = searchParams.get('period') || '30'
+    const role = session.user.role
 
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - parseInt(period))
+    if (role === 'ADMIN') {
+      return adminAnalytics()
+    } else if (role === 'DOCTOR') {
+      return doctorAnalytics(session.user.id)
+    } else if (role === 'RECEPTIONIST') {
+      return receptionistAnalytics()
+    }
 
-    const [
-      totalPatients,
-      totalTreatments,
-      totalAppointments,
-      checkInStats,
-      riskDistribution,
-      treatmentTypeDistribution,
-      recentAlerts,
-      complicationStats,
-    ] = await Promise.all([
-      prisma.patient.count({
-        where: clinicId ? { clinicId, isActive: true } : { isActive: true },
-      }),
-      prisma.treatment.count({
-        where: clinicId ? { clinicId } : {},
-      }),
-      prisma.appointment.count({
-        where: clinicId ? { clinicId } : {},
-      }),
-      prisma.recoveryCheckIn.groupBy({
-        by: ['status'],
-        where: { createdAt: { gte: startDate } },
-        _count: true,
-      }),
-      prisma.recoveryCheckIn.groupBy({
-        by: ['riskLevel'],
-        where: { createdAt: { gte: startDate } },
-        _count: true,
-      }),
-      prisma.treatment.groupBy({
-        by: ['type'],
-        where: clinicId ? { clinicId } : {},
-        _count: true,
-      }),
-      prisma.recoveryCheckIn.findMany({
-        where: { riskLevel: { in: ['RED', 'ORANGE'] }, status: { not: 'COMPLETED' } },
-        include: {
-          patient: { select: { firstName: true, lastName: true } },
-          treatment: { select: { type: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-      }),
-      prisma.complicationRecord.groupBy({
-        by: ['complicationType'],
-        _count: true,
-      }),
-    ])
-
-    const statusMap = Object.fromEntries(checkInStats.map(s => [s.status, s._count]))
-
-    return NextResponse.json({
-      totalPatients,
-      totalTreatments,
-      totalAppointments,
-      completedCheckIns: statusMap['COMPLETED'] || 0,
-      pendingCheckIns: statusMap['PENDING'] || 0,
-      escalatedCheckIns: statusMap['ESCALATED'] || 0,
-      riskDistribution: riskDistribution.map((r) => ({ level: r.riskLevel, count: r._count })),
-      treatmentTypeDistribution: treatmentTypeDistribution.map((t) => ({ type: t.type, count: t._count })),
-      recentAlerts,
-      complications: { total: 0, active: 0, vascular: 0 },
-      complicationStats: complicationStats.map((c) => ({ type: c.complicationType, count: c._count })),
-      weeklyTrend: [],
-    }, {
-      headers: {
-        'Cache-Control': 'private, s-maxage=30, stale-while-revalidate=60',
-      },
-    })
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   } catch (error) {
     console.error('Error fetching analytics:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+}
+
+async function adminAnalytics() {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  const [
+    totalDoctors,
+    totalReceptionists,
+    totalPatients,
+    totalTreatments,
+    totalAppointments,
+    recentPatients,
+    recentTreatments,
+    recentAppointments,
+    complications,
+    auditLogs,
+  ] = await Promise.all([
+    prisma.user.count({ where: { role: 'DOCTOR' } }),
+    prisma.user.count({ where: { role: 'RECEPTIONIST' } }),
+    prisma.patient.count({ where: { isActive: true } }),
+    prisma.treatment.count(),
+    prisma.appointment.count(),
+    prisma.patient.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.treatment.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.appointment.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.complicationRecord.count({ where: { reportedToRegulatory: false } }),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        action: true,
+        entity: true,
+        entityId: true,
+        createdAt: true,
+        user: { select: { name: true, role: true } },
+      },
+    }),
+  ])
+
+  return NextResponse.json({
+    totalDoctors,
+    totalReceptionists,
+    totalPatients,
+    totalTreatments,
+    totalAppointments,
+    recentPatients,
+    recentTreatments,
+    recentAppointments,
+    unreportedComplications: complications,
+    staffActivity: auditLogs,
+  })
+}
+
+async function doctorAnalytics(userId: string) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
+
+  const doctor = await prisma.doctor.findUnique({
+    where: { userId },
+    select: { id: true },
+  })
+
+  if (!doctor) {
+    return NextResponse.json({ error: 'Doctor profile not found' }, { status: 404 })
+  }
+
+  const [
+    todayAppointments,
+    flaggedCheckIns,
+    pendingCheckIns,
+    totalPatients,
+    recentTreatments,
+  ] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        doctorId: doctor.id,
+        appointmentDate: { gte: today, lt: tomorrow },
+        status: { not: 'CANCELLED' },
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
+      },
+      orderBy: { appointmentDate: 'asc' },
+    }),
+    prisma.recoveryCheckIn.findMany({
+      where: {
+        riskLevel: { in: ['ORANGE', 'RED'] },
+        status: { not: 'COMPLETED' },
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true } },
+        treatment: { select: { type: true } },
+        photos: {
+          include: {
+            aiAnalyses: { select: { riskLevel: true, clinicalSummary: true, createdAt: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { scheduledDate: 'asc' },
+      take: 10,
+    }),
+    prisma.recoveryCheckIn.count({
+      where: { status: 'PENDING' },
+    }),
+    prisma.patient.count({ where: { isActive: true } }),
+    prisma.treatment.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: {
+        patient: { select: { firstName: true, lastName: true } },
+      },
+    }),
+  ])
+
+  return NextResponse.json({
+    todayAppointments,
+    flaggedCheckIns,
+    pendingCheckIns,
+    totalPatients,
+    recentTreatments,
+  })
+}
+
+async function receptionistAnalytics() {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
+
+  const [
+    todayAppointments,
+    upcomingAppointments,
+    pendingCheckIns,
+    totalPatients,
+    priorityFlaggedPatients,
+  ] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        appointmentDate: { gte: today, lt: tomorrow },
+        status: { not: 'CANCELLED' },
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        doctor: { include: { user: { select: { name: true } } } },
+      },
+      orderBy: { appointmentDate: 'asc' },
+    }),
+    prisma.appointment.findMany({
+      where: {
+        appointmentDate: { gte: tomorrow },
+        status: 'SCHEDULED',
+      },
+      include: {
+        patient: { select: { id: true, firstName: true, lastName: true } },
+        doctor: { include: { user: { select: { name: true } } } },
+      },
+      orderBy: { appointmentDate: 'asc' },
+      take: 10,
+    }),
+    prisma.recoveryCheckIn.findMany({
+      where: {
+        status: 'COMPLETED',
+        completedDate: { gte: today },
+      },
+      select: {
+        id: true,
+        dayNumber: true,
+        completedDate: true,
+        patient: { select: { firstName: true, lastName: true } },
+      },
+    }),
+    prisma.patient.count({ where: { isActive: true } }),
+    prisma.patient.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+      },
+      take: 10,
+    }),
+  ])
+
+  return NextResponse.json({
+    todayAppointments,
+    upcomingAppointments,
+    todayCompletedCheckIns: pendingCheckIns,
+    totalPatients,
+    priorityFlaggedPatients,
+  })
 }

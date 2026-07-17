@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
+import { auditLog } from '@/lib/audit-log'
 
 export async function GET(req: Request) {
   try {
@@ -78,6 +79,58 @@ export async function PATCH(req: Request) {
     return NextResponse.json(checkIn)
   } catch (error) {
     console.error('Error updating check-in:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const session = await requireAuth()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can create check-ins' }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const { patientId, treatmentId, startDate, numberOfCheckIns, intervalDays, notes } = body
+
+    if (!patientId) {
+      return NextResponse.json({ error: 'patientId is required' }, { status: 400 })
+    }
+
+    const count = Math.min(Math.max(parseInt(numberOfCheckIns) || 5, 1), 30)
+    const interval = Math.min(Math.max(parseInt(intervalDays) || 1, 1), 30)
+    const start = startDate ? new Date(startDate) : new Date()
+
+    const checkIns = await Promise.all(
+      Array.from({ length: count }, (_, i) => {
+        const dayNumber = (i + 1) * interval
+        const scheduledDate = new Date(start.getTime() + dayNumber * 24 * 60 * 60 * 1000)
+        return prisma.recoveryCheckIn.create({
+          data: {
+            patientId,
+            treatmentId: treatmentId || undefined,
+            dayNumber,
+            scheduledDate,
+            notes: notes || undefined,
+          },
+        })
+      })
+    )
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'CREATE_CHECKINS',
+      entity: 'RecoveryCheckIn',
+      entityId: patientId,
+      newValues: { count, interval, startDate: start.toISOString() },
+    })
+
+    return NextResponse.json(checkIns, { status: 201 })
+  } catch (error) {
+    console.error('Error creating check-ins:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

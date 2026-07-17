@@ -96,7 +96,7 @@ export async function POST(req: Request) {
             id: ci.id,
             patient: `${ci.patient.firstName} ${ci.patient.lastName}`,
             phone: ci.patient.phone,
-            treatment: ci.treatment.type,
+            treatment: ci.treatment?.type || 'UNKNOWN',
             dayNumber: ci.dayNumber,
             scheduledDate: ci.scheduledDate,
           })),

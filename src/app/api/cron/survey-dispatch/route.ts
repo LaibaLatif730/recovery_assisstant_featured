@@ -67,7 +67,7 @@ export async function POST(req: Request) {
           to: checkIn.patient.phone,
           type: 'text',
           text: {
-            body: `Hi ${checkIn.patient.firstName}! 🎉\n\nCongratulations on completing your Day ${SURVEY_TRIGGER_DAY} recovery check-in for your ${checkIn.treatment.type.replace(/_/g, ' ')} treatment!\n\nWe'd love to hear about your experience. Please take a moment to complete our short survey:\n\n${baseUrl}/patient/survey\n\nYour feedback helps us improve our care. Thank you!\n\nAI Clinic Assistant`,
+            body: `Hi ${checkIn.patient.firstName}! 🎉\n\nCongratulations on completing your Day ${SURVEY_TRIGGER_DAY} recovery check-in for your ${(checkIn.treatment?.type || 'treatment').replace(/_/g, ' ')} treatment!\n\nWe'd love to hear about your experience. Please take a moment to complete our short survey:\n\n${baseUrl}/patient/survey\n\nYour feedback helps us improve our care. Thank you!\n\nAI Clinic Assistant`,
           },
         })
         surveysSent++

@@ -48,6 +48,9 @@ export async function POST(req: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can create injection mappings' }, { status: 403 })
+    }
 
     const body = await req.json()
     const validatedData = injectionMappingSchema.parse(body)
@@ -89,6 +92,9 @@ export async function DELETE(req: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can delete injection mappings' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -109,6 +115,9 @@ export async function PATCH(req: Request) {
   try {
     const session = await requireAuth()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can update injection mappings' }, { status: 403 })
+    }
 
     const body = await req.json()
     const { id, ...updateData } = body

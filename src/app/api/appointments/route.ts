@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { appointmentSchema } from '@/lib/validators'
 import { requireAuth } from '@/lib/api-auth'
+import { auditLog } from '@/lib/audit-log'
 
 export async function GET(req: Request) {
   try {
@@ -51,6 +52,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (session.user.role !== 'RECEPTIONIST') {
+      return NextResponse.json({ error: 'Only receptionists can create appointments' }, { status: 403 })
+    }
+
     const body = await req.json()
     const validatedData = appointmentSchema.parse(body)
 
@@ -70,6 +75,47 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `No patient found matching "${validatedData.patientName}". Please register the patient first.` }, { status: 404 })
     }
 
+    const appointmentDate = new Date(validatedData.appointmentDate)
+    const duration = validatedData.duration || 30
+    const endWindow = new Date(appointmentDate.getTime() + duration * 60 * 1000)
+
+    const conflict = await prisma.appointment.findFirst({
+      where: {
+        doctorId: validatedData.doctorId || undefined,
+        status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+        appointmentDate: { lt: endWindow },
+        patient: {
+          treatments: { some: { id: undefined } },
+        },
+      },
+      include: {
+        patient: { select: { firstName: true, lastName: true } },
+      },
+    })
+
+    const doctorConflict = validatedData.doctorId
+      ? await prisma.appointment.findFirst({
+          where: {
+            doctorId: validatedData.doctorId,
+            status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+            appointmentDate: {
+              lt: endWindow,
+              gte: new Date(appointmentDate.getTime() - duration * 60 * 1000),
+            },
+          },
+          include: {
+            patient: { select: { firstName: true, lastName: true } },
+          },
+        })
+      : null
+
+    if (doctorConflict) {
+      return NextResponse.json(
+        { error: `Doctor already has an appointment at this time with ${doctorConflict.patient.firstName} ${doctorConflict.patient.lastName}` },
+        { status: 409 }
+      )
+    }
+
     const appointment = await prisma.appointment.create({
       data: {
         patientId: patient.id,
@@ -85,6 +131,14 @@ export async function POST(req: Request) {
       },
     })
 
+    await auditLog({
+      userId: session.user.id,
+      action: 'CREATE_APPOINTMENT',
+      entity: 'Appointment',
+      entityId: appointment.id,
+      newValues: { patientId: patient.id, doctorId: validatedData.doctorId, appointmentDate, type: validatedData.type },
+    })
+
     return NextResponse.json(appointment, { status: 201 })
   } catch (error) {
     console.error('Error creating appointment:', error)
@@ -97,6 +151,9 @@ export async function PATCH(req: Request) {
     const session = await requireAuth()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (session.user.role !== 'RECEPTIONIST') {
+      return NextResponse.json({ error: 'Only receptionists can update appointments' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -119,10 +176,22 @@ export async function PATCH(req: Request) {
     if (updateData.type) allowedFields.type = updateData.type
     if (updateData.notes !== undefined) allowedFields.notes = updateData.notes
     if (updateData.doctorId !== undefined) allowedFields.doctorId = updateData.doctorId
+    if (updateData.priorityFlag !== undefined) allowedFields.priorityFlag = updateData.priorityFlag
+
+    const old = await prisma.appointment.findUnique({ where: { id } })
 
     const appointment = await prisma.appointment.update({
       where: { id },
       data: allowedFields,
+    })
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'UPDATE_APPOINTMENT',
+      entity: 'Appointment',
+      entityId: id,
+      oldValues: old ? { status: old.status, appointmentDate: old.appointmentDate, notes: old.notes } : undefined,
+      newValues: allowedFields,
     })
 
     return NextResponse.json(appointment)
@@ -138,6 +207,9 @@ export async function DELETE(req: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (session.user.role !== 'RECEPTIONIST') {
+      return NextResponse.json({ error: 'Only receptionists can delete appointments' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -147,6 +219,13 @@ export async function DELETE(req: Request) {
     }
 
     await prisma.appointment.delete({ where: { id } })
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'DELETE_APPOINTMENT',
+      entity: 'Appointment',
+      entityId: id,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

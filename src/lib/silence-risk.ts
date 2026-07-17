@@ -62,7 +62,7 @@ export async function detectSilenceRisks(): Promise<SilenceRiskResult[]> {
   })
 
   for (const checkIn of pendingCheckIns) {
-    const treatmentType = checkIn.treatment.type
+    const treatmentType = checkIn.treatment?.type || 'OTHER'
     const graceHours = GRACE_PERIOD_HOURS[treatmentType] || 12
     const hoursPastDue = (now.getTime() - checkIn.scheduledDate.getTime()) / (1000 * 60 * 60)
 

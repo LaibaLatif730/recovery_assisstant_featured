@@ -123,7 +123,7 @@ export async function POST(req: Request) {
         const grokResult = await analyzeWithGrok(
           base64Image,
           'image/jpeg',
-          pendingCheckIn.treatment.type,
+          pendingCheckIn.treatment?.type || 'OTHER',
           pendingCheckIn.dayNumber
         )
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -31,6 +31,10 @@ export default function AppointmentsPage() {
     appointmentDate: '', duration: '', type: '', notes: '', status: ''
   })
   const [error, setError] = useState('')
+  const [showSlotSuggestion, setShowSlotSuggestion] = useState(false)
+  const [slotForm, setSlotForm] = useState({ date: '', doctorId: '', duration: '30' })
+  const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
 
   useEffect(() => {
     fetchAppointments()
@@ -126,6 +130,19 @@ export default function AppointmentsPage() {
     }
   }
 
+  const fetchAvailableSlots = async () => {
+    if (!slotForm.date) return
+    setLoadingSlots(true)
+    try {
+      const params = new URLSearchParams({ date: slotForm.date, duration: slotForm.duration })
+      if (slotForm.doctorId) params.set('doctorId', slotForm.doctorId)
+      const res = await fetch(`/api/ai/suggest-slots?${params}`)
+      const data = await res.json()
+      if (res.ok) setAvailableSlots(data.availableSlots)
+    } catch {}
+    finally { setLoadingSlots(false) }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'CONFIRMED': return 'default'
@@ -143,15 +160,53 @@ export default function AppointmentsPage() {
           <h1 className="text-2xl font-bold text-white">Appointments</h1>
           <p className="text-muted-foreground">Manage patient appointments</p>
         </div>
-        <Link href="/dashboard/appointments/new">
-          <Button>
-            <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Book Appointment
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowSlotSuggestion(!showSlotSuggestion)}>
+            {showSlotSuggestion ? 'Cancel' : 'Suggest Slots'}
           </Button>
-        </Link>
+          <Link href="/dashboard/appointments/new">
+            <Button>
+              <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Book Appointment
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {showSlotSuggestion && (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI Slot Suggestion</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 items-end">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Date</label>
+                <Input type="date" value={slotForm.date} onChange={e => setSlotForm({...slotForm, date: e.target.value})} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Duration (min)</label>
+                <Input type="number" value={slotForm.duration} onChange={e => setSlotForm({...slotForm, duration: e.target.value})} className="w-20" />
+              </div>
+              <Button onClick={fetchAvailableSlots} disabled={loadingSlots || !slotForm.date}>
+                {loadingSlots ? 'Finding...' : 'Find Slots'}
+              </Button>
+            </div>
+            {availableSlots.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm text-muted-foreground mb-2">Available slots on {slotForm.date}:</p>
+                <div className="flex flex-wrap gap-2">
+                  {availableSlots.map(slot => (
+                    <Badge key={slot} variant="outline" className="cursor-pointer hover:bg-primary/20">{slot}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {error && (
         <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm">
           {error}
