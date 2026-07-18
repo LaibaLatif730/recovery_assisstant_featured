@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
+import { auditLog } from '@/lib/audit-log'
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -79,6 +80,9 @@ export async function GET(req: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can view photo trends' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const patientId = searchParams.get('patientId')
@@ -103,6 +107,16 @@ export async function GET(req: Request) {
         checkIn: { select: { dayNumber: true, scheduledDate: true, treatmentId: true } },
       },
       orderBy: { createdAt: 'asc' },
+    })
+
+    await auditLog({
+      userId: session.user.id,
+      entity: 'Patient',
+      entityId: patientId,
+      action: 'PATIENT_VIEWED',
+      newValues: { photoAnalysesCount: analyses.length },
+      ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined,
+      userAgent: req.headers.get('user-agent') || undefined,
     })
 
     if (analyses.length === 0) {

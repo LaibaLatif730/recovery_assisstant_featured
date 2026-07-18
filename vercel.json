@@ -3,6 +3,30 @@
     {
       "path": "/api/cron/check-silence",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/appointment-reminders",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/survey-dispatch",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/expiry-alerts",
+      "schedule": "0 6 * * 1"
+    },
+    {
+      "path": "/api/cron/complication-reporting",
+      "schedule": "0 10 * * 1"
+    },
+    {
+      "path": "/api/cron/consent-reminders",
+      "schedule": "0 6 * * 1"
+    },
+    {
+      "path": "/api/cron/rebooking-triggers",
+      "schedule": "0 11 * * *"
     }
   ]
 }
