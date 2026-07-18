@@ -1,4 +1,5 @@
 import { classifyRiskLevel, generateClinicalRecommendation, type ClinicalRiskLevel } from './utils'
+import { evaluateDecisionPath, generateExplainabilityOutput, type ExplainabilityOutput } from './treatment-decision-trees'
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -33,6 +34,8 @@ export interface GrokAnalysis {
   aiFailureReason?: string
   trendDirection?: 'IMPROVING' | 'STABLE' | 'WORSENING'
   trendDetails?: { metric: string; previousScore: number; currentScore: number; changePercent: number }[]
+  explainability?: ExplainabilityOutput
+  decisionPath?: { node: string; evaluated: boolean; result: 'PASS' | 'FAIL' | 'SKIP'; explanation: string }[]
 }
 
 function getTreatmentSpecificPrompt(treatmentType: string, dayNumber: number): string {
@@ -209,6 +212,28 @@ export async function analyzeWithGrok(
         vascularity: features.vascularity,
       })
 
+      const explainability = generateExplainabilityOutput(
+        treatmentType || 'OTHER',
+        dayNumber || 1,
+        features,
+        riskClassification.level,
+        parsed.rationale
+      )
+
+      const decisionPath = evaluateDecisionPath(
+        {
+          treatmentType: treatmentType || 'OTHER',
+          name: treatmentType?.replace(/_/g, ' ') || 'Unknown',
+          description: '',
+          riskFactors: [],
+          decisionNodes: [],
+          escalationTriggers: [],
+          expectedTimeline: [],
+          patientExplanation: '',
+        },
+        features
+      )
+
       return {
         riskLevel: riskClassification.level,
         findings: (parsed.findings || []).map((f: any) => ({
@@ -227,6 +252,8 @@ export async function analyzeWithGrok(
         confidenceScore: typeof parsed.confidenceScore === 'number' ? Math.min(1, Math.max(0, parsed.confidenceScore)) : 0.5,
         rationale: parsed.rationale || generateDefaultRationale(features, riskClassification.level, treatmentType, dayNumber),
         confidenceFactors: parsed.confidenceFactors || [],
+        explainability,
+        decisionPath,
       }
     }
 
@@ -262,6 +289,23 @@ function fallbackClinicalAnalysis(
 
   console.error(`[AI_UNAVAILABLE] Clinical analysis failed: ${failureReason}. Returning ORANGE for mandatory human review.`)
 
+  const fallbackFeatures = {
+    edema: 0,
+    ecchymosis: 0,
+    erythema: 0,
+    asymmetry: 0,
+    nodules: 0,
+    vascularity: 0,
+  }
+
+  const explainability = generateExplainabilityOutput(
+    treatmentType || 'OTHER',
+    dayNumber || 1,
+    fallbackFeatures,
+    'ORANGE',
+    `AI analysis system unavailable (${failureReason}). Risk level defaulted to ORANGE to ensure mandatory clinician review.`
+  )
+
   return {
     riskLevel: 'ORANGE',
     findings: [
@@ -282,14 +326,7 @@ function fallbackClinicalAnalysis(
     aiResponse: 'AI analysis unavailable — mandatory clinician review required',
     clinicalSummary: `AI ANALYSIS FAILED: ${failureReason}. This check-in has been flagged for mandatory human review. The photo was uploaded successfully but could not be assessed by the AI system. A clinician must manually review this submission to ensure patient safety.`,
     recommendedAction: 'MANDATORY CLINICIAN REVIEW — AI system could not analyze this photo',
-    clinicalFeatures: {
-      edema: 0,
-      ecchymosis: 0,
-      erythema: 0,
-      asymmetry: 0,
-      nodules: 0,
-      vascularity: 0,
-    },
+    clinicalFeatures: fallbackFeatures,
     labels: ['AI_UNAVAILABLE', 'REQUIRES_MANUAL_REVIEW'],
     confidenceScore: 0,
     rationale: `AI analysis system unavailable (${failureReason}). Risk level defaulted to ORANGE to ensure mandatory clinician review. No clinical assessment was performed — all scores are placeholders. A qualified clinician must manually review this photo to determine patient recovery status and rule out complications including vascular occlusion or necrosis.`,
@@ -299,6 +336,8 @@ function fallbackClinicalAnalysis(
     ],
     aiUnavailable: true,
     aiFailureReason: failureReason,
+    explainability,
+    decisionPath: [],
   }
 }
 

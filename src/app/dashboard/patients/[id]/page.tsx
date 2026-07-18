@@ -412,6 +412,23 @@ export default function PatientDetailPage() {
                         ))}
                       </div>
                     )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          patientId: patient!.id,
+                          treatmentType: treatment.type,
+                          dayNumber: treatment.checkIns.length > 0
+                            ? Math.max(...treatment.checkIns.map(c => c.dayNumber)).toString()
+                            : '1',
+                        })
+                        window.open(`/api/ai/explain-analysis?${params.toString()}`, '_blank')
+                      }}
+                    >
+                      View Explainability
+                    </Button>
                   </div>
                 ))}
               </div>
