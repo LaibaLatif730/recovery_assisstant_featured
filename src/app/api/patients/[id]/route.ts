@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
+import { auditLog } from '@/lib/audit-log'
 
 export async function GET(
   req: Request,
@@ -13,6 +14,8 @@ export async function GET(
     }
 
     const { id } = await params
+    const role = session.user.role
+
     const patient = await prisma.patient.findUnique({
       where: { id },
       include: {
@@ -20,7 +23,10 @@ export async function GET(
           include: {
             doctor: { include: { user: true } },
             checkIns: {
-              include: { photos: true, aiAnalyses: true },
+              include: {
+                photos: role === 'DOCTOR',
+                aiAnalyses: role === 'DOCTOR',
+              },
               orderBy: { scheduledDate: 'asc' },
             },
           },
@@ -28,16 +34,70 @@ export async function GET(
         },
         appointments: { orderBy: { appointmentDate: 'desc' } },
         checkIns: {
-          include: { photos: true, aiAnalyses: true },
+          include: {
+            photos: role === 'DOCTOR',
+            aiAnalyses: role === 'DOCTOR',
+          },
           orderBy: { scheduledDate: 'desc' },
           take: 10,
         },
-        photos: { orderBy: { uploadDate: 'desc' }, take: 20 },
+        photos: role === 'DOCTOR' ? { orderBy: { uploadDate: 'desc' }, take: 20 } : false,
       },
     })
 
     if (!patient) {
       return NextResponse.json({ error: 'Patient not found' }, { status: 404 })
+    }
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'VIEW_PATIENT',
+      entity: 'Patient',
+      entityId: id,
+      ipAddress: req.headers.get('x-forwarded-for') || undefined,
+      userAgent: req.headers.get('user-agent') || undefined,
+    })
+
+    if (role === 'ADMIN') {
+      const { photos, ...patientWithoutPhotos } = patient as any
+      const stripped = {
+        ...patientWithoutPhotos,
+        checkIns: patientWithoutPhotos.checkIns?.map((c: any) => {
+          const { photos: _p, aiAnalyses: _a, ...rest } = c
+          return rest
+        }),
+        treatments: patientWithoutPhotos.treatments?.map((t: any) => ({
+          ...t,
+          checkIns: t.checkIns?.map((c: any) => {
+            const { photos: _p, aiAnalyses: _a, ...rest } = c
+            return rest
+          }),
+        })),
+      }
+      return NextResponse.json(stripped)
+    }
+
+    if (role === 'RECEPTIONIST') {
+      const stripped = {
+        ...patient,
+        checkIns: patient.checkIns?.map((c: any) => ({
+          id: c.id,
+          dayNumber: c.dayNumber,
+          scheduledDate: c.scheduledDate,
+          status: c.status,
+          completedDate: c.completedDate,
+        })),
+        treatments: patient.treatments?.map((t: any) => ({
+          ...t,
+          checkIns: t.checkIns?.map((c: any) => ({
+            id: c.id,
+            dayNumber: c.dayNumber,
+            scheduledDate: c.scheduledDate,
+            status: c.status,
+          })),
+        })),
+      }
+      return NextResponse.json(stripped)
     }
 
     return NextResponse.json(patient)

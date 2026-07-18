@@ -2,12 +2,17 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { clinicalNoteSchema } from '@/lib/validators'
 import { requireAuth } from '@/lib/api-auth'
+import { auditLog } from '@/lib/audit-log'
 
 export async function GET(req: Request) {
   try {
     const session = await requireAuth()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can view clinical notes' }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)
@@ -28,6 +33,13 @@ export async function GET(req: Request) {
       },
       orderBy: { createdAt: 'desc' },
       take: 200,
+    })
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'VIEW_CLINICAL_NOTES',
+      entity: 'ClinicalNote',
+      entityId: patientId || undefined,
     })
 
     return NextResponse.json(notes)

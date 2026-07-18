@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { requireAuth } from '@/lib/api-auth'
+import { auditLog } from '@/lib/audit-log'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,6 +14,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params
     const body = await req.json()
 
+    const old = await prisma.clinicalNote.findUnique({ where: { id }, select: { content: true, noteType: true } })
+
     const note = await prisma.clinicalNote.update({
       where: { id },
       data: {
@@ -20,6 +23,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         content: body.content || undefined,
         isPrivate: body.isPrivate,
       },
+    })
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'UPDATE_CLINICAL_NOTE',
+      entity: 'ClinicalNote',
+      entityId: id,
+      oldValues: old ? { content: old.content, noteType: old.noteType } : undefined,
+      newValues: { content: body.content, noteType: body.noteType },
     })
 
     return NextResponse.json(note)
@@ -40,6 +52,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const { id } = await params
 
     await prisma.clinicalNote.delete({ where: { id } })
+
+    await auditLog({
+      userId: session.user.id,
+      action: 'DELETE_CLINICAL_NOTE',
+      entity: 'ClinicalNote',
+      entityId: id,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {
