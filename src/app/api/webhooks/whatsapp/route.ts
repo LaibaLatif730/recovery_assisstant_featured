@@ -32,6 +32,118 @@ export async function POST(req: Request) {
     const { messages } = parseWhatsAppWebhook(body)
 
     for (const message of messages) {
+      if (message.type === 'text' && message.text?.body) {
+        try {
+          const patientPhone = message.from
+          const text = message.text.body.trim().toLowerCase()
+
+          const normalizePhone = (s: string) => s.replace(/\D/g, '')
+          const normalizedIncoming = normalizePhone(patientPhone)
+
+          const patients = await prisma.patient.findMany({
+            where: { isActive: true },
+            select: { id: true, phone: true, firstName: true },
+          })
+          const existingPatient = patients.find(p => p.phone && normalizePhone(p.phone) === normalizedIncoming)
+
+          if (text.startsWith('register') || text.startsWith('intake') || text.startsWith('new patient')) {
+            const parts = message.text.body.trim().split('\n')
+            const nameLine = parts.find(p => p.toLowerCase().startsWith('name:'))
+            const emailLine = parts.find(p => p.toLowerCase().startsWith('email:'))
+            const reasonLine = parts.find(p => p.toLowerCase().startsWith('reason:') || p.toLowerCase().startsWith('concern:'))
+
+            const name = nameLine?.replace(/name:\s*/i, '').trim()
+            const email = emailLine?.replace(/email:\s*/i, '').trim()
+            const reason = reasonLine?.replace(/(reason|concern):\s*/i, '').trim()
+
+            if (name) {
+              const nameParts = name.split(/\s+/)
+              const firstName = nameParts[0]
+              const lastName = nameParts.slice(1).join(' ') || firstName
+
+              await prisma.patient.create({
+                data: {
+                  firstName,
+                  lastName,
+                  email: email || undefined,
+                  phone: patientPhone,
+                  consentGiven: true,
+                  consentDate: new Date(),
+                },
+              })
+
+              await sendWhatsAppMessage(patientPhone, {
+                messaging_product: 'whatsapp',
+                to: patientPhone,
+                type: 'text',
+                text: {
+                  body: `✅ Thank you, ${name}! Your patient record has been created.\n\nOur team will contact you shortly to schedule your consultation.\n\nIf you have any questions, please reply to this message.\n\nAI Clinic Assistant`,
+                },
+              })
+
+              const receptionists = await prisma.user.findMany({ where: { role: 'RECEPTIONIST' }, select: { id: true } })
+              for (const rec of receptionists) {
+                await prisma.notification.create({
+                  data: {
+                    userId: rec.id,
+                    title: 'New Patient via WhatsApp Intake',
+                    message: `${name} (${patientPhone}) registered via WhatsApp. Reason: ${reason || 'Not specified'}. Please follow up to schedule consultation.`,
+                    type: 'INTAKE',
+                    channel: 'WHATSAPP',
+                  },
+                })
+              }
+              continue
+            }
+
+            await sendWhatsAppMessage(patientPhone, {
+              messaging_product: 'whatsapp',
+              to: patientPhone,
+              type: 'text',
+              text: {
+                body: `📝 To register as a new patient, please reply with:\n\nREGISTER\nName: Your Full Name\nEmail: your@email.com\nReason: Brief description of your concern\n\nOur team will contact you shortly.`,
+              },
+            })
+            continue
+          }
+
+          if (existingPatient) {
+            if (text === 'confirm' || text === 'yes') {
+              await sendWhatsAppMessage(patientPhone, {
+                messaging_product: 'whatsapp',
+                to: patientPhone,
+                type: 'text',
+                text: { body: `✅ Thank you, ${existingPatient.firstName}! Your appointment has been confirmed.\n\nSee you soon!\nAI Clinic Assistant` },
+              })
+              continue
+            }
+
+            if (text === 'reschedule') {
+              await sendWhatsAppMessage(patientPhone, {
+                messaging_product: 'whatsapp',
+                to: patientPhone,
+                type: 'text',
+                text: { body: `📅 To reschedule, please reply with your preferred date and time, or call the clinic directly.\n\nAI Clinic Assistant` },
+              })
+              continue
+            }
+          }
+
+          if (!existingPatient) {
+            await sendWhatsAppMessage(patientPhone, {
+              messaging_product: 'whatsapp',
+              to: patientPhone,
+              type: 'text',
+              text: {
+                body: `Welcome to AI Clinic! 👋\n\nTo get started, reply with:\n• REGISTER — to create a patient account\n• Or send a photo for check-in if you're an existing patient\n\nAI Clinic Assistant`,
+              },
+            })
+          }
+        } catch (textError) {
+          console.error(`[WHATSAPP] Failed to process text message:`, textError)
+        }
+      }
+
       if (message.type !== 'image') continue
 
       try {

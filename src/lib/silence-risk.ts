@@ -1,5 +1,5 @@
 import prisma from './db'
-import { getRecoveryTimeline } from './utils'
+import { sendWhatsAppMessage } from './whatsapp'
 
 const GRACE_PERIOD_HOURS: Record<string, number> = {
   BOTOX: 12,
@@ -55,7 +55,7 @@ export async function detectSilenceRisks(): Promise<SilenceRiskResult[]> {
       scheduledDate: { lt: now },
     },
     include: {
-      patient: { select: { id: true, firstName: true, lastName: true } },
+      patient: { select: { id: true, firstName: true, lastName: true, phone: true } },
       treatment: { select: { type: true } },
       photos: true,
     },
@@ -72,12 +72,22 @@ export async function detectSilenceRisks(): Promise<SilenceRiskResult[]> {
       where: { patientId: checkIn.patientId },
     })
 
+    const previousNoShows = await prisma.appointment.count({
+      where: { patientId: checkIn.patientId, status: 'NO_SHOW' },
+    })
+
+    const previousSilenceRisks = await prisma.silenceRiskLog.count({
+      where: { patientId: checkIn.patientId, resolvedAt: null },
+    })
+
     const complicationWeight = hasComplications ? 1.5 : 1.0
     const treatmentWeight = COMPLICATION_RISK_WEIGHT[treatmentType] || 1.0
     const dayWeight = checkIn.dayNumber <= 3 ? 1.3 : 1.0
     const hoursOverdueFactor = Math.min(hoursPastDue / graceHours, 3.0)
+    const noShowWeight = 1 + (previousNoShows * 0.2)
+    const repeatRiskWeight = 1 + (previousSilenceRisks * 0.15)
 
-    const riskScore = hoursOverdueFactor * treatmentWeight * complicationWeight * dayWeight
+    const riskScore = hoursOverdueFactor * treatmentWeight * complicationWeight * dayWeight * noShowWeight * repeatRiskWeight
 
     let escalationLevel = 'LOW'
     if (riskScore >= 4.0) escalationLevel = 'CRITICAL'
@@ -100,6 +110,32 @@ export async function detectSilenceRisks(): Promise<SilenceRiskResult[]> {
       where: { id: checkIn.id },
       data: { status: 'SILENCE_RISK' },
     })
+
+    if ((escalationLevel === 'HIGH' || escalationLevel === 'CRITICAL') && checkIn.patient.phone) {
+      await sendWhatsAppMessage(checkIn.patient.phone, {
+        messaging_product: 'whatsapp',
+        to: checkIn.patient.phone,
+        type: 'text',
+        text: {
+          body: `Hi ${checkIn.patient.firstName}, we noticed you haven't completed your Day ${checkIn.dayNumber} recovery check-in for your ${treatmentType.replace(/_/g, ' ').toLowerCase()} treatment.\n\nYour recovery is important to us. Please upload a photo or reply to let us know how you're doing.\n\nIf you have any concerns, please contact the clinic directly.`,
+        },
+      })
+    }
+
+    if (escalationLevel === 'CRITICAL') {
+      const doctors = await prisma.user.findMany({ where: { role: 'DOCTOR' }, select: { id: true } })
+      for (const doc of doctors) {
+        await prisma.notification.create({
+          data: {
+            userId: doc.id,
+            title: 'CRITICAL Silence Risk',
+            message: `Patient ${checkIn.patient.firstName} ${checkIn.patient.lastName} — Day ${checkIn.dayNumber} check-in overdue by ${Math.round(hoursPastDue)}h. Risk score: ${Math.round(riskScore * 100) / 100}. Treatment: ${treatmentType}. Immediate attention required.`,
+            type: 'CRITICAL_ALERT',
+            channel: 'SYSTEM',
+          },
+        })
+      }
+    }
 
     results.push({
       checkInId: checkIn.id,
