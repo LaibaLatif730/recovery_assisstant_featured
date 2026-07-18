@@ -10,6 +10,9 @@ export async function GET(req: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (session.user.role !== 'DOCTOR') {
+      return NextResponse.json({ error: 'Only doctors can view explainability output' }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const patientId = searchParams.get('patientId')
