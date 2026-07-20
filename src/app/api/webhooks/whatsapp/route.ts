@@ -57,18 +57,30 @@ export async function POST(req: Request) {
             const reason = reasonLine?.replace(/(reason|concern):\s*/i, '').trim()
 
             if (name) {
-              const nameParts = name.split(/\s+/)
-              const firstName = nameParts[0]
-              const lastName = nameParts.slice(1).join(' ') || firstName
+              const existingIntake = await prisma.whatsAppIntake.findFirst({
+                where: { phone: patientPhone, status: 'PENDING' },
+              })
 
-              await prisma.patient.create({
+              if (existingIntake) {
+                await sendWhatsAppMessage(patientPhone, {
+                  messaging_product: 'whatsapp',
+                  to: patientPhone,
+                  type: 'text',
+                  text: {
+                    body: `⏳ You already have a pending registration request.\n\nOur team is reviewing it and will contact you shortly.\n\nIf you need to update your information, please reply with the corrected details.\n\nAI Clinic Assistant`,
+                  },
+                })
+                continue
+              }
+
+              await prisma.whatsAppIntake.create({
                 data: {
-                  firstName,
-                  lastName,
-                  email: email || undefined,
                   phone: patientPhone,
-                  consentGiven: true,
-                  consentDate: new Date(),
+                  name,
+                  email: email || undefined,
+                  reason: reason || undefined,
+                  rawMessage: message.text.body,
+                  status: 'PENDING',
                 },
               })
 
@@ -77,7 +89,7 @@ export async function POST(req: Request) {
                 to: patientPhone,
                 type: 'text',
                 text: {
-                  body: `✅ Thank you, ${name}! Your patient record has been created.\n\nOur team will contact you shortly to schedule your consultation.\n\nIf you have any questions, please reply to this message.\n\nAI Clinic Assistant`,
+                  body: `📝 Thank you, ${name}! Your registration request has been received.\n\nOur team will review it shortly and contact you to schedule your consultation.\n\nIf you have any questions, please reply to this message.\n\nAI Clinic Assistant`,
                 },
               })
 
@@ -86,8 +98,8 @@ export async function POST(req: Request) {
                 await prisma.notification.create({
                   data: {
                     userId: rec.id,
-                    title: 'New Patient via WhatsApp Intake',
-                    message: `${name} (${patientPhone}) registered via WhatsApp. Reason: ${reason || 'Not specified'}. Please follow up to schedule consultation.`,
+                    title: 'New WhatsApp Intake Request',
+                    message: `${name} (${patientPhone}) submitted a registration request. Reason: ${reason || 'Not specified'}. Please review and approve in the Intake dashboard.`,
                     type: 'INTAKE',
                     channel: 'WHATSAPP',
                   },
@@ -101,7 +113,7 @@ export async function POST(req: Request) {
               to: patientPhone,
               type: 'text',
               text: {
-                body: `📝 To register as a new patient, please reply with:\n\nREGISTER\nName: Your Full Name\nEmail: your@email.com\nReason: Brief description of your concern\n\nOur team will contact you shortly.`,
+                body: `📝 To register as a new patient, please reply with:\n\nREGISTER\nName: Your Full Name\nEmail: your@email.com\nReason: Brief description of your concern\n\nOur team will review your request and contact you shortly.\n\nAI Clinic Assistant`,
               },
             })
             continue

@@ -30,6 +30,7 @@ model User {
   appointments  Appointment[] @relation("AppointmentUser")
   auditLogs     AuditLog[]
   notifications Notification[]
+  reviewedIntakes WhatsAppIntake[]
 
   @@index([email])
   @@index([role])
@@ -106,6 +107,8 @@ model Patient {
   passwordHash    String?
   passwordSetAt   DateTime?
   isActive        Boolean  @default(true)
+  source          String   @default("STAFF")  // STAFF, WHATSAPP, ONLINE
+  intakeId        String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -507,6 +510,28 @@ model Notification {
   @@index([userId])
   @@index([type])
   @@index([isRead])
+}
+
+// ─── WhatsApp Intake ─────────────────────────────────────────
+
+model WhatsAppIntake {
+  id              String    @id @default(cuid())
+  phone           String
+  name            String?
+  email           String?
+  reason          String?
+  rawMessage      String?
+  status          String    @default("PENDING")  // PENDING, APPROVED, REJECTED
+  patientId       String?   // Set when approved → creates Patient record
+  reviewedById    String?
+  reviewedBy      User?     @relation(fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([phone])
 }
 
 // ─── Surveys ──────────────────────────────────────────────────
