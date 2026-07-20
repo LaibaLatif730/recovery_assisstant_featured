@@ -65,7 +65,7 @@ export async function POST(req: Request) {
           appointmentDate: followUpDate,
           type: 'FOLLOW_UP',
           status: 'SCHEDULED',
-          notes: `Auto-triggered: ${analysis.riskLevel} risk level detected on Day ${checkIn.dayNumber} check-in. ${analysis.clinicalSummary || ''}`,
+          notes: `Auto-triggered follow-up based on Day ${checkIn.dayNumber} check-in clinical review. ${analysis.clinicalSummary || ''}`,
         },
       })
 
@@ -93,13 +93,12 @@ export async function POST(req: Request) {
           data: {
             userId: admin.id,
             title: `Auto-Rebook: ${patient.firstName} ${patient.lastName}`,
-            message: `${analysis.riskLevel} risk detected — follow-up appointment auto-created for ${followUpDate.toLocaleDateString()}`,
+            message: `Priority follow-up auto-created for ${followUpDate.toLocaleDateString()} based on clinical review trigger.`,
             type: 'REBOOKING_TRIGGER',
             channel: 'IN_APP',
             metadata: JSON.stringify({
               analysisId: analysis.id,
               patientId: patient.id,
-              riskLevel: analysis.riskLevel,
               followUpDate: followUpDate.toISOString(),
             }),
           },

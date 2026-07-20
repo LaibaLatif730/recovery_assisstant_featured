@@ -86,38 +86,49 @@ export async function POST(req: Request) {
           remindersSent++
         }
       } else if (now >= reminderDate) {
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN' },
-          select: { id: true },
-        })
+        const alreadyReminded = consent.lastReminderSent &&
+          (now.getTime() - new Date(consent.lastReminderSent).getTime()) < REMINDER_WINDOW_DAYS * 24 * 60 * 60 * 1000
 
-        for (const admin of admins) {
-          await prisma.notification.create({
-            data: {
-              userId: admin.id,
-              title: `Consent Expiring: ${consent.patient.firstName} ${consent.patient.lastName}`,
-              message: `${consent.consentType.replace(/_/g, ' ')} consent expires on ${expiryDate.toLocaleDateString()}. Please arrange renewal.`,
-              type: 'CONSENT_EXPIRING',
-              channel: 'IN_APP',
-              metadata: JSON.stringify({
-                consentId: consent.id,
-                patientId: consent.patientId,
-                consentType: consent.consentType,
-                expiryDate: expiryDate.toISOString(),
-              }),
-            },
+        if (!alreadyReminded) {
+          const admins = await prisma.user.findMany({
+            where: { role: 'ADMIN' },
+            select: { id: true },
           })
-        }
 
-        if (consent.patient.phone) {
-          await sendWhatsAppMessage(consent.patient.phone, {
-            messaging_product: 'whatsapp',
-            to: consent.patient.phone,
-            type: 'text',
-            text: {
-              body: `Hi ${consent.patient.firstName},\n\nYour ${consent.consentType.replace(/_/g, ' ').toLowerCase()} consent will expire on ${expiryDate.toLocaleDateString()}. Please contact the clinic to renew it.\n\nThank you,\nAI Clinic Assistant`,
-            },
+          for (const admin of admins) {
+            await prisma.notification.create({
+              data: {
+                userId: admin.id,
+                title: `Consent Expiring: ${consent.patient.firstName} ${consent.patient.lastName}`,
+                message: `${consent.consentType.replace(/_/g, ' ')} consent expires on ${expiryDate.toLocaleDateString()}. Please arrange renewal.`,
+                type: 'CONSENT_EXPIRING',
+                channel: 'IN_APP',
+                metadata: JSON.stringify({
+                  consentId: consent.id,
+                  patientId: consent.patientId,
+                  consentType: consent.consentType,
+                  expiryDate: expiryDate.toISOString(),
+                }),
+              },
+            })
+          }
+
+          if (consent.patient.phone) {
+            await sendWhatsAppMessage(consent.patient.phone, {
+              messaging_product: 'whatsapp',
+              to: consent.patient.phone,
+              type: 'text',
+              text: {
+                body: `Hi ${consent.patient.firstName},\n\nYour ${consent.consentType.replace(/_/g, ' ').toLowerCase()} consent will expire on ${expiryDate.toLocaleDateString()}. Please contact the clinic to renew it.\n\nThank you,\nAI Clinic Assistant`,
+              },
+            })
+          }
+
+          await prisma.consentRecord.update({
+            where: { id: consent.id },
+            data: { lastReminderSent: now },
           })
+
           remindersSent++
         }
       }
