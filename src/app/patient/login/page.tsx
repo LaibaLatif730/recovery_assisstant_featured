@@ -151,6 +151,15 @@ export default function PatientLoginPage() {
             )}
           </Button>
         </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-white/50">
+            Don&apos;t have an account?{' '}
+            <a href="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+              Create one
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   )
