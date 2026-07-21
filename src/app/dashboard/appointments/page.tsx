@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -42,12 +42,9 @@ export default function AppointmentsPage() {
     fetchAppointments()
   }, [])
 
-  const fetchAppointments = async (date?: string) => {
+  const fetchAppointments = async () => {
     try {
-      const params = new URLSearchParams()
-      if (date) params.set('date', date)
-      const url = date ? `/api/appointments?${params}` : '/api/appointments'
-      const res = await fetch(url)
+      const res = await fetch('/api/appointments')
       const data = await res.json()
       setAppointments(Array.isArray(data) ? data : [])
     } catch (error) {
@@ -59,7 +56,6 @@ export default function AppointmentsPage() {
 
   const handleDateFilter = (date: string) => {
     setDateFilter(date)
-    fetchAppointments(date || undefined)
   }
 
   const handleEdit = (appointment: Appointment) => {
@@ -87,7 +83,7 @@ export default function AppointmentsPage() {
       })
       if (res.ok) {
         setEditingAppointment(null)
-        fetchAppointments(dateFilter || undefined)
+        fetchAppointments()
       } else {
         const data = await res.json()
         setError(data.error || 'Failed to update appointment')
@@ -105,7 +101,7 @@ export default function AppointmentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: 'CONFIRMED' }),
       })
-      if (res.ok) fetchAppointments(dateFilter || undefined)
+      if (res.ok) fetchAppointments()
       else setError('Failed to confirm appointment')
     } catch {
       setError('Failed to confirm appointment')
@@ -121,7 +117,7 @@ export default function AppointmentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: 'CANCELLED' }),
       })
-      if (res.ok) fetchAppointments(dateFilter || undefined)
+      if (res.ok) fetchAppointments()
       else setError('Failed to cancel appointment')
     } catch {
       setError('Failed to cancel appointment')
@@ -133,7 +129,7 @@ export default function AppointmentsPage() {
     setError('')
     try {
       const res = await fetch(`/api/appointments?id=${id}`, { method: 'DELETE' })
-      if (res.ok) fetchAppointments(dateFilter || undefined)
+      if (res.ok) fetchAppointments()
       else setError('Failed to delete appointment')
     } catch {
       setError('Failed to delete appointment')
@@ -153,13 +149,18 @@ export default function AppointmentsPage() {
     finally { setLoadingSlots(false) }
   }
 
-  const filteredAppointments = appointments
-    .filter(a => filter === 'ALL' || a.status === filter)
-    .filter(a => {
-      if (!dateFilter) return true
-      const aptDate = new Date(a.appointmentDate).toISOString().slice(0, 10)
-      return aptDate === dateFilter
-    })
+  const filteredAppointments = useMemo(() => {
+    return appointments
+      .filter(a => filter === 'ALL' || a.status === filter)
+      .filter(a => {
+        if (!dateFilter) return true
+        const d = new Date(a.appointmentDate)
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}` === dateFilter
+      })
+  }, [appointments, filter, dateFilter])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -294,11 +295,11 @@ export default function AppointmentsPage() {
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">Filter by date:</label>
-              <Input
+              <input
                 type="date"
                 value={dateFilter}
                 onChange={(e) => handleDateFilter(e.target.value)}
-                className="w-40"
+                className="h-12 w-40 rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white"
               />
               {dateFilter && (
                 <Button variant="ghost" size="sm" onClick={() => handleDateFilter('')}>Clear</Button>
