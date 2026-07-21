@@ -106,7 +106,7 @@ export default function PatientLoginPage() {
                 placeholder="patient@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input-glass pl-12"
+                className="pl-12"
                 required
               />
             </div>
@@ -125,7 +125,7 @@ export default function PatientLoginPage() {
                 placeholder="Your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="input-glass pl-12"
+                className="pl-12"
                 required
               />
             </div>
