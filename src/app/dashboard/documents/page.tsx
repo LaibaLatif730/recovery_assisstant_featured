@@ -36,6 +36,7 @@ export default function DocumentsPage() {
   const [selectedTreatment, setSelectedTreatment] = useState('')
   const [selectedType, setSelectedType] = useState('SOAP')
   const [viewingDoc, setViewingDoc] = useState<ClinicalDocument | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   useEffect(() => {
     fetchDocuments()
@@ -91,14 +92,48 @@ export default function DocumentsPage() {
 
   const handleApprove = async (docId: string) => {
     try {
-      await fetch('/api/clinical-documents', {
+      const res = await fetch('/api/clinical-documents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: docId, doctorApproved: true }),
       })
-      fetchDocuments()
+      if (res.ok) {
+        setToast({ message: 'Document approved successfully', type: 'success' })
+        setViewingDoc(null)
+        fetchDocuments()
+        setTimeout(() => setToast(null), 3000)
+      } else {
+        setToast({ message: 'Failed to approve document', type: 'error' })
+        setTimeout(() => setToast(null), 3000)
+      }
     } catch (error) {
       console.error('Error approving document:', error)
+      setToast({ message: 'Failed to approve document', type: 'error' })
+      setTimeout(() => setToast(null), 3000)
+    }
+  }
+
+  const handleDiscard = async (docId: string) => {
+    if (!confirm('Are you sure you want to discard this document?')) return
+    try {
+      const res = await fetch('/api/clinical-documents', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: docId }),
+      })
+      if (res.ok) {
+        setToast({ message: 'Document discarded', type: 'success' })
+        setViewingDoc(null)
+        fetchDocuments()
+        setTimeout(() => setToast(null), 3000)
+      } else {
+        setToast({ message: 'Failed to discard document', type: 'error' })
+        setTimeout(() => setToast(null), 3000)
+      }
+    } catch (error) {
+      console.error('Error discarding document:', error)
+      setToast({ message: 'Failed to discard document', type: 'error' })
+      setTimeout(() => setToast(null), 3000)
     }
   }
 
@@ -108,6 +143,14 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div className={`p-4 rounded-xl text-sm ${
+          toast.type === 'success' ? 'bg-green-500/20 border border-green-500/30 text-green-300' :
+          'bg-red-500/20 border border-red-500/30 text-red-300'
+        }`}>
+          {toast.message}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Clinical Documents</h1>
@@ -161,9 +204,14 @@ export default function DocumentsPage() {
               <pre className="text-sm whitespace-pre-wrap font-mono">{viewingDoc.content}</pre>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button onClick={() => handleApprove(viewingDoc.id)} disabled={viewingDoc.doctorApproved}>
-                {viewingDoc.doctorApproved ? 'Approved' : 'Approve Document'}
-              </Button>
+              {!viewingDoc.doctorApproved ? (
+                <>
+                  <Button onClick={() => handleApprove(viewingDoc.id)}>Approve Document</Button>
+                  <Button variant="destructive" onClick={() => handleDiscard(viewingDoc.id)}>Discard</Button>
+                </>
+              ) : (
+                <Button disabled>Approved</Button>
+              )}
               <Button variant="outline" onClick={() => navigator.clipboard.writeText(viewingDoc.content)}>
                 Copy to Clipboard
               </Button>

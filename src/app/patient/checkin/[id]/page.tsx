@@ -28,7 +28,7 @@ interface CheckInData {
   patientMessage: string
   aiResponse: string
   patient: { id: string; firstName: string; lastName: string }
-  treatment: { id: string; type: string; productName: string; treatmentDate: string }
+  treatment: { id: string; type: string; productName: string; treatmentDate: string } | null
   photos: { id: string; imageUrl: string; uploadDate: string; aiAnalyses: Analysis[] }[]
   aiAnalyses: Analysis[]
 }
@@ -213,7 +213,7 @@ export default function CheckInPage() {
             <div>
               <h1 className="text-2xl font-bold text-white">Day {checkIn.dayNumber} Recovery Check-in</h1>
               <p className="text-white/60">
-                {checkIn.treatment.type.replace(/_/g, ' ')} • {formatDate(checkIn.scheduledDate)}
+                {checkIn.treatment?.type?.replace(/_/g, ' ') || 'Recovery'} • {formatDate(checkIn.scheduledDate)}
               </p>
             </div>
           </div>
@@ -221,11 +221,11 @@ export default function CheckInPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="glass-subtle p-4 rounded-xl">
               <p className="text-white/50 text-sm mb-1">Treatment</p>
-              <p className="text-white font-medium">{checkIn.treatment.productName || checkIn.treatment.type.replace(/_/g, ' ')}</p>
+              <p className="text-white font-medium">{checkIn.treatment?.productName || checkIn.treatment?.type?.replace(/_/g, ' ') || 'Treatment'}</p>
             </div>
             <div className="glass-subtle p-4 rounded-xl">
               <p className="text-white/50 text-sm mb-1">Treatment Date</p>
-              <p className="text-white font-medium">{formatDate(checkIn.treatment.treatmentDate)}</p>
+              <p className="text-white font-medium">{checkIn.treatment?.treatmentDate ? formatDate(checkIn.treatment.treatmentDate) : 'N/A'}</p>
             </div>
             <div className="glass-subtle p-4 rounded-xl">
               <p className="text-white/50 text-sm mb-1">Status</p>

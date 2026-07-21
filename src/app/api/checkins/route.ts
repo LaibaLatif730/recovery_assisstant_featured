@@ -100,14 +100,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'patientId is required' }, { status: 400 })
     }
 
+    if (treatmentId) {
+      const existingCheckIns = await prisma.recoveryCheckIn.findMany({
+        where: { treatmentId },
+        select: { id: true },
+      })
+      if (existingCheckIns.length > 0) {
+        return NextResponse.json({ error: 'Check-ins already exist for this treatment' }, { status: 400 })
+      }
+    }
+
     const count = Math.min(Math.max(parseInt(numberOfCheckIns) || 5, 1), 30)
     const interval = Math.min(Math.max(parseInt(intervalDays) || 1, 1), 30)
     const start = startDate ? new Date(startDate) : new Date()
+    start.setHours(0, 0, 0, 0)
 
     const checkIns = await Promise.all(
       Array.from({ length: count }, (_, i) => {
-        const dayNumber = (i + 1) * interval
-        const scheduledDate = new Date(start.getTime() + dayNumber * 24 * 60 * 60 * 1000)
+        const dayNumber = i + 1
+        const scheduledDate = new Date(start.getTime() + (i * interval) * 24 * 60 * 60 * 1000)
         return prisma.recoveryCheckIn.create({
           data: {
             patientId,

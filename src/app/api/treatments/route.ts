@@ -50,6 +50,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const validatedData = treatmentSchema.parse(body)
     const numberOfCheckIns = Math.min(Math.max(parseInt(body.numberOfCheckIns) || 5, 0), 30)
+    const status = body.status || (new Date(validatedData.treatmentDate) > new Date() ? 'SCHEDULED' : 'COMPLETED')
 
     let injectionAreasStr = '[]'
     if (validatedData.injectionAreas) {
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
         treatmentDate: new Date(validatedData.treatmentDate),
         notes: validatedData.notes || undefined,
         aftercareNotes: validatedData.aftercareNotes || undefined,
+        status,
       },
     })
 

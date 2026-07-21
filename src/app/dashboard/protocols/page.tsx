@@ -123,10 +123,16 @@ export default function ProtocolsPage() {
     if (!confirm('Are you sure you want to delete this protocol?')) return
     setDeletingId(id)
     try {
-      await fetch(`/api/protocols/${id}`, { method: 'DELETE' })
-      fetchProtocols()
+      const res = await fetch(`/api/protocols/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        fetchProtocols()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete protocol')
+      }
     } catch (error) {
       console.error('Error deleting protocol:', error)
+      alert('Failed to delete protocol')
     } finally {
       setDeletingId(null)
     }

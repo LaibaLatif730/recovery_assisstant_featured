@@ -41,6 +41,7 @@ export default function TreatmentsPage() {
     type: '', productName: '', units: '', notes: '', aftercareNotes: '', status: '', treatmentDate: ''
   })
   const [error, setError] = useState('')
+  const [filter, setFilter] = useState('ALL')
 
   useEffect(() => {
     fetchTreatments()
@@ -57,6 +58,10 @@ export default function TreatmentsPage() {
       setLoading(false)
     }
   }
+
+  const filteredTreatments = filter === 'ALL'
+    ? treatments
+    : treatments.filter((t) => t.status === filter)
 
   const handleEdit = (treatment: Treatment) => {
     setEditingTreatment(treatment)
@@ -223,18 +228,32 @@ export default function TreatmentsPage() {
               <label className="text-sm font-medium">Aftercare Notes</label>
               <Textarea value={editForm.aftercareNotes} onChange={(e) => setEditForm({ ...editForm, aftercareNotes: e.target.value })} rows={3} />
             </div>
-            <Button onClick={handleUpdate}>Save Changes</Button>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleUpdate}>Save Changes</Button>
+              <Button variant="outline" onClick={() => setEditingTreatment(null)}>Cancel</Button>
+            </div>
           </CardContent>
         </Card>
       )}
 
       <Card>
         <CardHeader>
-          <div className="flex gap-4">
-            <Badge variant="outline">All</Badge>
-            <Badge>Completed</Badge>
-            <Badge variant="secondary">Scheduled</Badge>
-            <Badge variant="destructive">Follow-up Needed</Badge>
+          <div className="flex gap-2">
+            {[
+              { key: 'ALL', label: 'All', variant: 'outline' },
+              { key: 'COMPLETED', label: 'Completed', variant: 'default' },
+              { key: 'SCHEDULED', label: 'Scheduled', variant: 'secondary' },
+              { key: 'FOLLOW_UP_NEEDED', label: 'Follow-up Needed', variant: 'destructive' },
+            ].map((tab) => (
+              <Badge
+                key={tab.key}
+                variant={filter === tab.key ? 'default' : 'outline'}
+                className="cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => setFilter(tab.key)}
+              >
+                {tab.label}
+              </Badge>
+            ))}
           </div>
         </CardHeader>
         <CardContent>
@@ -242,16 +261,20 @@ export default function TreatmentsPage() {
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : treatments.length === 0 ? (
+          ) : filteredTreatments.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-muted-foreground">No treatments recorded yet</p>
-              <Link href="/dashboard/treatments/new" className="mt-4 inline-block">
-                <Button>Record your first treatment</Button>
-              </Link>
+              <p className="text-muted-foreground">
+                {filter === 'ALL' ? 'No treatments recorded yet' : `No ${filter.toLowerCase().replace(/_/g, ' ')} treatments`}
+              </p>
+              {filter === 'ALL' && (
+                <Link href="/dashboard/treatments/new" className="mt-4 inline-block">
+                  <Button>Record your first treatment</Button>
+                </Link>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
-              {treatments.map((treatment) => (
+              {filteredTreatments.map((treatment) => (
                 <div key={treatment.id} className="p-4 border rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setSelectedTreatment(treatment)}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">

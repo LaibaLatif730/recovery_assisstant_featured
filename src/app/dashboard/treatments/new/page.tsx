@@ -32,6 +32,7 @@ export default function NewTreatmentPage() {
     notes: '',
     aftercareNotes: '',
     numberOfCheckIns: '5',
+    status: 'SCHEDULED',
   })
   const { validate, getFieldError } = useZodForm(treatmentSchema)
 
@@ -134,7 +135,7 @@ export default function NewTreatmentPage() {
               <FieldError error={getFieldError('patientId')} />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Treatment Type *</label>
                 <Select
@@ -147,6 +148,15 @@ export default function NewTreatmentPage() {
                   ))}
                 </Select>
                 <FieldError error={getFieldError('type')} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  <option value="SCHEDULED">Scheduled</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="FOLLOW_UP_NEEDED">Follow-up Needed</option>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Treatment Date *</label>

@@ -21,7 +21,7 @@ interface DoctorData {
     riskLevel: string
     scheduledDate: string
     patient: { id: string; firstName: string; lastName: string }
-    treatment: { type: string }
+    treatment: { type: string } | null
     photos: {
       aiAnalyses: { riskLevel: string; clinicalSummary: string | null; createdAt: string }[]
     }[]
@@ -39,13 +39,32 @@ interface DoctorData {
 export default function DoctorDashboardPage() {
   const [data, setData] = useState<DoctorData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  const fetchDashboard = async () => {
+    setLoading(true)
+    setError(false)
+    try {
+      const res = await fetch('/api/analytics')
+      if (!res.ok) {
+        setError(true)
+        return
+      }
+      const d = await res.json()
+      if (d && !d.error) {
+        setData(d)
+      } else {
+        setError(true)
+      }
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    fetch('/api/analytics')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !d.error) setData(d) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    fetchDashboard()
   }, [])
 
   if (loading) {
@@ -56,8 +75,16 @@ export default function DoctorDashboardPage() {
     )
   }
 
-  if (!data) {
-    return <div className="text-center py-8 text-muted-foreground">Failed to load dashboard</div>
+  if (error || !data) {
+    return (
+      <div className="text-center py-16">
+        <svg className="h-12 w-12 text-muted-foreground mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <p className="text-muted-foreground mb-4">Failed to load dashboard</p>
+        <Button onClick={fetchDashboard}>Retry</Button>
+      </div>
+    )
   }
 
   return (
@@ -156,7 +183,7 @@ export default function DoctorDashboardPage() {
                     <div>
                       <p className="font-medium">{checkIn.patient.firstName} {checkIn.patient.lastName}</p>
                       <p className="text-sm text-muted-foreground">
-                        Day {checkIn.dayNumber} · {checkIn.treatment.type.replace(/_/g, ' ')}
+                        Day {checkIn.dayNumber} · {checkIn.treatment?.type?.replace(/_/g, ' ') || 'N/A'}
                       </p>
                       {checkIn.photos[0]?.aiAnalyses[0]?.clinicalSummary && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-1">

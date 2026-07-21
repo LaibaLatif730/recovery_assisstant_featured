@@ -12,9 +12,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     const { id } = await params
 
-    await prisma.treatmentProtocol.update({
+    await prisma.treatmentProtocol.delete({
       where: { id },
-      data: { isActive: false },
     })
 
     return NextResponse.json({ success: true })

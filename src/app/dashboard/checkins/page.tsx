@@ -17,7 +17,7 @@ interface CheckIn {
   symptoms: string | null
   completedDate: string | null
   patient: { id: string; firstName: string; lastName: string; phone: string }
-  treatment: { id: string; type: string; treatmentDate: string }
+  treatment: { id: string; type: string; treatmentDate: string } | null
   photos: any[]
   aiAnalyses: any[]
 }
@@ -277,7 +277,7 @@ export default function CheckInsPage() {
                             {checkIn.patient.firstName} {checkIn.patient.lastName}
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            Day {checkIn.dayNumber} check-in • {checkIn.treatment.type.replace(/_/g, ' ')}
+                            Day {checkIn.dayNumber} check-in • {checkIn.treatment?.type?.replace(/_/g, ' ') || 'N/A'}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             Scheduled: {formatDate(checkIn.scheduledDate)}
@@ -331,8 +331,8 @@ export default function CheckInsPage() {
                         <div className="grid grid-cols-2 gap-3 text-sm">
                           <div><span className="text-muted-foreground">Patient ID:</span> {checkIn.patient.id}</div>
                           <div><span className="text-muted-foreground">Phone:</span> {checkIn.patient.phone || 'N/A'}</div>
-                          <div><span className="text-muted-foreground">Treatment ID:</span> {checkIn.treatment.id}</div>
-                          <div><span className="text-muted-foreground">Treatment Date:</span> {formatDate(checkIn.treatment.treatmentDate)}</div>
+                          <div><span className="text-muted-foreground">Treatment ID:</span> {checkIn.treatment?.id || 'N/A'}</div>
+                          <div><span className="text-muted-foreground">Treatment Date:</span> {checkIn.treatment?.treatmentDate ? formatDate(checkIn.treatment.treatmentDate) : 'N/A'}</div>
                           <div><span className="text-muted-foreground">Completed:</span> {checkIn.completedDate ? formatDate(checkIn.completedDate) : 'Not completed'}</div>
                           {checkIn.symptoms && <div className="col-span-2"><span className="text-muted-foreground">Symptoms:</span> {checkIn.symptoms}</div>}
                         </div>

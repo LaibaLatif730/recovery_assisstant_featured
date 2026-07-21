@@ -213,7 +213,7 @@ model Treatment {
   treatmentDate   DateTime @default(now())
   notes           String?
   aftercareNotes  String?
-  status          String   @default("COMPLETED")
+  status          String   @default("SCHEDULED")
   nextReviewDate  DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
