@@ -39,7 +39,7 @@ export const registerSchema = z.object({
     .max(128, 'Password must be 128 characters or less')
     .regex(/[a-zA-Z]/, 'Password must contain at least one letter')
     .regex(/\d/, 'Password must contain at least one number'),
-  role: z.enum(['PATIENT', 'RECEPTIONIST', 'DOCTOR', 'ADMIN']).default('PATIENT'),
+  role: z.literal('PATIENT').default('PATIENT'),
   phone: z.string()
     .min(1, 'Phone number is required')
     .refine((val) => {

@@ -19,7 +19,6 @@ export default function SignupPage() {
     password: '',
     confirmPassword: '',
     phone: '',
-    role: 'DOCTOR',
   })
 
   const { validate, getFieldError } = useZodForm(registerSchema)
@@ -35,7 +34,7 @@ export default function SignupPage() {
       return
     }
 
-    if (!validate({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined, role: form.role as any })) {
+    if (!validate({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined })) {
       setLoading(false)
       return
     }
@@ -49,7 +48,6 @@ export default function SignupPage() {
           email: form.email,
           password: form.password,
           phone: form.phone || undefined,
-          role: form.role,
         }),
       })
 
@@ -89,7 +87,7 @@ export default function SignupPage() {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
-          <p className="text-white/60">Register as a clinic staff member</p>
+          <p className="text-white/60">Register as a patient</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -158,31 +156,6 @@ export default function SignupPage() {
               />
             </div>
             <FieldError error={getFieldError('phone')} />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-white/80 block">Role *</label>
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <select
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="flex h-12 w-full rounded-xl border border-white/15 bg-white/8 backdrop-blur-sm px-4 py-3 pl-12 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:border-indigo-500/50 transition-all duration-300 cursor-pointer appearance-none"
-              >
-                <option value="DOCTOR">Doctor</option>
-                <option value="RECEPTIONIST">Receptionist</option>
-                <option value="ADMIN">Admin</option>
-              </select>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </div>
           </div>
 
           <div className="space-y-2">

@@ -9,6 +9,13 @@ export async function POST(req: Request) {
     const body = await req.json()
     const validatedData = registerSchema.parse(body)
 
+    if (validatedData.role !== 'PATIENT') {
+      return NextResponse.json(
+        { error: 'Self-registration is only available for patients. Staff accounts are created by administrators.' },
+        { status: 403 }
+      )
+    }
+
     const existingUser = await prisma.user.findUnique({
       where: { email: validatedData.email },
     })

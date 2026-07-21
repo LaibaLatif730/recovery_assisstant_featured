@@ -59,7 +59,7 @@ export default function DoctorsPage() {
     setSubmitting(true)
     setError('')
 
-    if (!validate({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined, role: 'DOCTOR' })) {
+    if (!validate({ name: form.name, email: form.email, password: form.password, phone: form.phone || undefined })) {
       setSubmitting(false)
       return
     }

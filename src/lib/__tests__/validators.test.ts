@@ -21,7 +21,7 @@ describe('Validators', () => {
     it('should reject short password', () => {
       const result = loginSchema.safeParse({
         email: 'test@example.com',
-        password: '12345',
+        password: '',
       })
       expect(result.success).toBe(false)
     })
@@ -33,6 +33,7 @@ describe('Validators', () => {
         name: 'John Doe',
         email: 'john@example.com',
         password: 'password123',
+        phone: '1234567890',
         role: 'PATIENT',
       })
       expect(result.success).toBe(true)
@@ -43,6 +44,7 @@ describe('Validators', () => {
         name: 'J',
         email: 'john@example.com',
         password: 'password123',
+        phone: '1234567890',
       })
       expect(result.success).toBe(false)
     })
@@ -52,11 +54,23 @@ describe('Validators', () => {
         name: 'John Doe',
         email: 'john@example.com',
         password: 'password123',
+        phone: '1234567890',
       })
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.data.role).toBe('PATIENT')
       }
+    })
+
+    it('should reject non-PATIENT roles', () => {
+      const result = registerSchema.safeParse({
+        name: 'John Doe',
+        email: 'john@example.com',
+        password: 'password123',
+        phone: '1234567890',
+        role: 'DOCTOR',
+      })
+      expect(result.success).toBe(false)
     })
   })
 
@@ -90,17 +104,20 @@ describe('Validators', () => {
       const result = patientSchema.safeParse({
         firstName: 'Alice',
         lastName: 'Smith',
+        phone: '1234567890',
       })
       expect(result.success).toBe(true)
     })
   })
 
   describe('treatmentSchema', () => {
+    const recentDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
     it('should validate correct treatment data', () => {
       const result = treatmentSchema.safeParse({
         patientId: 'patient-123',
         type: 'BOTOX',
-        treatmentDate: '2024-01-15',
+        treatmentDate: recentDate,
       })
       expect(result.success).toBe(true)
     })
@@ -108,7 +125,7 @@ describe('Validators', () => {
     it('should require patientId', () => {
       const result = treatmentSchema.safeParse({
         type: 'BOTOX',
-        treatmentDate: '2024-01-15',
+        treatmentDate: recentDate,
       })
       expect(result.success).toBe(false)
     })
@@ -116,7 +133,7 @@ describe('Validators', () => {
     it('should require treatment type', () => {
       const result = treatmentSchema.safeParse({
         patientId: 'patient-123',
-        treatmentDate: '2024-01-15',
+        treatmentDate: recentDate,
       })
       expect(result.success).toBe(false)
     })
@@ -139,7 +156,7 @@ describe('Validators', () => {
         const result = treatmentSchema.safeParse({
           patientId: 'patient-123',
           type,
-          treatmentDate: '2024-01-15',
+          treatmentDate: recentDate,
         })
         expect(result.success).toBe(true)
       })
@@ -147,18 +164,20 @@ describe('Validators', () => {
   })
 
   describe('appointmentSchema', () => {
+    const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('.')[0]
+
     it('should validate correct appointment data', () => {
       const result = appointmentSchema.safeParse({
-        patientId: 'patient-123',
-        appointmentDate: '2024-01-15T10:00:00',
+        patientName: 'John Doe',
+        appointmentDate: futureDate,
       })
       expect(result.success).toBe(true)
     })
 
     it('should default duration to 30', () => {
       const result = appointmentSchema.safeParse({
-        patientId: 'patient-123',
-        appointmentDate: '2024-01-15T10:00:00',
+        patientName: 'John Doe',
+        appointmentDate: futureDate,
       })
       expect(result.success).toBe(true)
       if (result.success) {
@@ -168,8 +187,8 @@ describe('Validators', () => {
 
     it('should default type to CONSULTATION', () => {
       const result = appointmentSchema.safeParse({
-        patientId: 'patient-123',
-        appointmentDate: '2024-01-15T10:00:00',
+        patientName: 'John Doe',
+        appointmentDate: futureDate,
       })
       expect(result.success).toBe(true)
       if (result.success) {
@@ -179,8 +198,8 @@ describe('Validators', () => {
 
     it('should reject duration less than 15', () => {
       const result = appointmentSchema.safeParse({
-        patientId: 'patient-123',
-        appointmentDate: '2024-01-15T10:00:00',
+        patientName: 'John Doe',
+        appointmentDate: futureDate,
         duration: 10,
       })
       expect(result.success).toBe(false)
@@ -188,8 +207,8 @@ describe('Validators', () => {
 
     it('should reject duration greater than 180', () => {
       const result = appointmentSchema.safeParse({
-        patientId: 'patient-123',
-        appointmentDate: '2024-01-15T10:00:00',
+        patientName: 'John Doe',
+        appointmentDate: futureDate,
         duration: 200,
       })
       expect(result.success).toBe(false)
