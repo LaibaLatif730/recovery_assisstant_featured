@@ -87,7 +87,7 @@ export default function AppointmentsPage() {
       })
       if (res.ok) {
         setEditingAppointment(null)
-        fetchAppointments()
+        fetchAppointments(dateFilter || undefined)
       } else {
         const data = await res.json()
         setError(data.error || 'Failed to update appointment')
@@ -105,7 +105,7 @@ export default function AppointmentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: 'CONFIRMED' }),
       })
-      if (res.ok) fetchAppointments()
+      if (res.ok) fetchAppointments(dateFilter || undefined)
       else setError('Failed to confirm appointment')
     } catch {
       setError('Failed to confirm appointment')
@@ -121,7 +121,7 @@ export default function AppointmentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status: 'CANCELLED' }),
       })
-      if (res.ok) fetchAppointments()
+      if (res.ok) fetchAppointments(dateFilter || undefined)
       else setError('Failed to cancel appointment')
     } catch {
       setError('Failed to cancel appointment')
@@ -133,7 +133,7 @@ export default function AppointmentsPage() {
     setError('')
     try {
       const res = await fetch(`/api/appointments?id=${id}`, { method: 'DELETE' })
-      if (res.ok) fetchAppointments()
+      if (res.ok) fetchAppointments(dateFilter || undefined)
       else setError('Failed to delete appointment')
     } catch {
       setError('Failed to delete appointment')
