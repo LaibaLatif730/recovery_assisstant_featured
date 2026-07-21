@@ -69,7 +69,7 @@ export default function NewPatientPage() {
       const data = await res.json()
 
       if (res.ok) {
-        router.push(`/dashboard/patients/${data.id}`)
+        router.push('/dashboard/patients')
       } else {
         setError(data.error || 'Failed to create patient')
       }

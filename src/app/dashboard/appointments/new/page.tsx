@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,10 +11,17 @@ import { FieldError } from '@/components/FieldError'
 import { appointmentSchema } from '@/lib/validators'
 import { useZodForm } from '@/hooks/useZodForm'
 
+interface Patient {
+  id: string
+  firstName: string
+  lastName: string
+}
+
 export default function NewAppointmentPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [patients, setPatients] = useState<Patient[]>([])
   const [form, setForm] = useState({
     patientName: '',
     type: 'CONSULTATION',
@@ -23,6 +30,13 @@ export default function NewAppointmentPage() {
     notes: '',
   })
   const { validate, getFieldError } = useZodForm(appointmentSchema)
+
+  useEffect(() => {
+    fetch('/api/patients')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setPatients(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,15 +94,21 @@ export default function NewAppointmentPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Patient Name *</label>
-              <Input
-                type="text"
-                placeholder="e.g. John Smith"
+              <Select
                 value={form.patientName}
                 onChange={(e) => setForm({ ...form, patientName: e.target.value })}
-                maxLength={200}
                 required
-              />
-              <p className="text-xs text-muted-foreground">Type the full name of an existing registered patient</p>
+              >
+                <option value="">Select a patient</option>
+                {patients.map((patient) => (
+                  <option key={patient.id} value={`${patient.firstName} ${patient.lastName}`}>
+                    {patient.firstName} {patient.lastName}
+                  </option>
+                ))}
+              </Select>
+              {patients.length === 0 && (
+                <p className="text-xs text-muted-foreground">No registered patients found. Please register a patient first.</p>
+              )}
               <FieldError error={getFieldError('patientName')} />
             </div>
 

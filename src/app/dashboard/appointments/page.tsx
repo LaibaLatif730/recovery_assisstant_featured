@@ -35,14 +35,19 @@ export default function AppointmentsPage() {
   const [slotForm, setSlotForm] = useState({ date: '', doctorId: '', duration: '30' })
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [filter, setFilter] = useState('ALL')
+  const [dateFilter, setDateFilter] = useState('')
 
   useEffect(() => {
     fetchAppointments()
   }, [])
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = async (date?: string) => {
     try {
-      const res = await fetch('/api/appointments')
+      const params = new URLSearchParams()
+      if (date) params.set('date', date)
+      const url = date ? `/api/appointments?${params}` : '/api/appointments'
+      const res = await fetch(url)
       const data = await res.json()
       setAppointments(Array.isArray(data) ? data : [])
     } catch (error) {
@@ -50,6 +55,11 @@ export default function AppointmentsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDateFilter = (date: string) => {
+    setDateFilter(date)
+    fetchAppointments(date || undefined)
   }
 
   const handleEdit = (appointment: Appointment) => {
@@ -142,6 +152,10 @@ export default function AppointmentsPage() {
     } catch {}
     finally { setLoadingSlots(false) }
   }
+
+  const filteredAppointments = filter === 'ALL'
+    ? appointments
+    : appointments.filter(a => a.status === filter)
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -257,11 +271,35 @@ export default function AppointmentsPage() {
       )}
       <Card>
         <CardHeader>
-          <div className="flex gap-2">
-            <Badge variant="outline">All</Badge>
-            <Badge>Scheduled</Badge>
-            <Badge variant="secondary">Completed</Badge>
-            <Badge variant="destructive">Cancelled</Badge>
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              {['ALL', 'SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED'].map((status) => (
+                <Badge
+                  key={status}
+                  variant={
+                    filter === status ? 'default' :
+                    status === 'CANCELLED' ? 'destructive' :
+                    status === 'COMPLETED' ? 'secondary' : 'outline'
+                  }
+                  className="cursor-pointer hover:opacity-80"
+                  onClick={() => setFilter(status)}
+                >
+                  {status === 'ALL' ? 'All' : status.replace(/_/g, ' ')}
+                </Badge>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">Filter by date:</label>
+              <Input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => handleDateFilter(e.target.value)}
+                className="w-40"
+              />
+              {dateFilter && (
+                <Button variant="ghost" size="sm" onClick={() => handleDateFilter('')}>Clear</Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -269,7 +307,7 @@ export default function AppointmentsPage() {
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-          ) : appointments.length === 0 ? (
+          ) : filteredAppointments.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">No appointments scheduled</p>
               <Link href="/dashboard/appointments/new" className="mt-4 inline-block">
@@ -278,7 +316,7 @@ export default function AppointmentsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {appointments.map((appointment) => (
+              {filteredAppointments.map((appointment) => (
                 <div key={appointment.id} className="p-4 border rounded-lg hover:bg-white/5 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">

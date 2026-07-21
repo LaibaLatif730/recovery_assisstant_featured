@@ -363,7 +363,7 @@ export default function PatientDetailPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Photos Uploaded</span>
-                    <span className="font-medium">{patient.photos.length}</span>
+                    <span className="font-medium">{patient.photos?.length ?? 0}</span>
                   </div>
                 </>
               )}
@@ -561,9 +561,11 @@ export default function PatientDetailPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={getRiskBadge(checkIn.riskLevel)}>
-                        {checkIn.riskLevel}
-                      </Badge>
+                      {checkIn.riskLevel && (
+                        <Badge variant={getRiskBadge(checkIn.riskLevel)}>
+                          {checkIn.riskLevel}
+                        </Badge>
+                      )}
                       <Badge variant={
                         checkIn.status === 'COMPLETED' ? 'default' :
                         checkIn.status === 'ESCALATED' ? 'destructive' : 'secondary'
