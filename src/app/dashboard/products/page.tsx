@@ -128,11 +128,13 @@ export default function ProductsPage() {
     }
   }
 
-  const isExpiringSoon = (date: string) => {
+  const getExpiryStatus = (date: string): 'expired' | 'expiring' | 'ok' => {
     const expiry = new Date(date)
     const now = new Date()
     const daysUntil = (expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    return daysUntil < 90
+    if (daysUntil < 0) return 'expired'
+    if (daysUntil < 30) return 'expiring'
+    return 'ok'
   }
 
   return (
@@ -248,20 +250,28 @@ export default function ProductsPage() {
 
                   {product.batches.length > 0 && (
                     <div className="mt-3 space-y-2">
-                      {product.batches.map(batch => (
-                        <div key={batch.id} className="flex items-center justify-between p-2 bg-white/5 rounded text-sm">
-                          <div className="flex items-center gap-3">
-                            <span>Lot: {batch.batchNumber}</span>
-                            {batch.quantity && <span>Qty: {batch.quantity}</span>}
+                      {product.batches.map(batch => {
+                        const expiryStatus = getExpiryStatus(batch.expiryDate)
+                        return (
+                          <div key={batch.id} className="flex items-center justify-between p-2 bg-white/5 rounded text-sm">
+                            <div className="flex items-center gap-3">
+                              <span>Lot: {batch.batchNumber}</span>
+                              {batch.quantity && <span>Qty: {batch.quantity}</span>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={
+                                expiryStatus === 'expired' ? 'text-red-400' :
+                                expiryStatus === 'expiring' ? 'text-orange-400' :
+                                'text-muted-foreground'
+                              }>
+                                Exp: {formatDate(batch.expiryDate)}
+                              </span>
+                              {expiryStatus === 'expired' && <Badge variant="destructive">Expired</Badge>}
+                              {expiryStatus === 'expiring' && <Badge variant="secondary">Expiring Soon</Badge>}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className={isExpiringSoon(batch.expiryDate) ? 'text-orange-400' : 'text-muted-foreground'}>
-                              Exp: {formatDate(batch.expiryDate)}
-                            </span>
-                            {isExpiringSoon(batch.expiryDate) && <Badge variant="secondary">Expiring Soon</Badge>}
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
 

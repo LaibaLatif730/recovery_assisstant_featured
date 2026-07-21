@@ -9,14 +9,13 @@ const optionalStr = z.string().optional().transform(v => v === '' ? undefined : 
 
 const nameField = (fieldName: string) =>
   z.string()
-    .min(1, `${fieldName} is required`)
+    .min(3, `${fieldName} must be at least 3 characters`)
     .max(50, `${fieldName} must be 50 characters or less`)
     .regex(nameRegex, `${fieldName} must contain only letters, spaces, hyphens, or apostrophes`)
 
 const phoneField = z.string()
-  .optional()
+  .min(1, 'Phone number is required')
   .refine((val) => {
-    if (!val || val.trim() === '') return true
     return strictPhoneRegex.test(val.replace(/[\s\-()+\s]/g, ''))
   }, 'Phone must contain only digits (7-15 characters)')
 
@@ -24,21 +23,26 @@ const emailField = z.string()
   .min(1, 'Email is required')
   .email('Invalid email address')
   .max(100, 'Email must be 100 characters or less')
+  .transform(val => val.trim())
 
 export const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
-  password: z.string().min(1, 'Password is required').min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(1, 'Password is required'),
 })
 
 export const registerSchema = z.object({
   name: nameField('Name'),
   email: emailField,
-  password: z.string().min(1, 'Password is required').min(6, 'Password must be at least 6 characters'),
+  password: z.string()
+    .min(1, 'Password is required')
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be 128 characters or less')
+    .regex(/[a-zA-Z]/, 'Password must contain at least one letter')
+    .regex(/\d/, 'Password must contain at least one number'),
   role: z.enum(['PATIENT', 'RECEPTIONIST', 'DOCTOR', 'ADMIN']).default('PATIENT'),
   phone: z.string()
-    .optional()
+    .min(1, 'Phone number is required')
     .refine((val) => {
-      if (!val || val.trim() === '') return true
       return strictPhoneRegex.test(val.replace(/[\s\-()+\s]/g, ''))
     }, 'Phone must contain only digits (7-15 characters)'),
   clinicId: optionalStr,

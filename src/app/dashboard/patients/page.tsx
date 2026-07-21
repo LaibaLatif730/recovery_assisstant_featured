@@ -75,7 +75,7 @@ export default function PatientsPage() {
           <h1 className="text-2xl font-bold text-white">Patients</h1>
           <p className="text-muted-foreground">Manage your patient records</p>
         </div>
-        {(userRole === 'ADMIN' || userRole === 'DOCTOR' || userRole === 'RECEPTIONIST') && (
+        {(userRole === 'DOCTOR' || userRole === 'RECEPTIONIST') && (
           <Link href="/dashboard/patients/new">
             <Button>
               <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -115,7 +115,7 @@ export default function PatientsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
               <p className="text-muted-foreground">No patients found</p>
-              {(userRole === 'ADMIN' || userRole === 'DOCTOR' || userRole === 'RECEPTIONIST') && (
+              {(userRole === 'DOCTOR' || userRole === 'RECEPTIONIST') && (
                 <Link href="/dashboard/patients/new" className="mt-4 inline-block">
                   <Button>Add your first patient</Button>
                 </Link>
