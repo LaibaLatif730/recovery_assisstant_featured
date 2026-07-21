@@ -176,10 +176,7 @@ function LoginForm() {
 
       <div className="mt-6 text-center space-y-3">
         <p className="text-sm text-white/50">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
-            Create one
-          </Link>
+          Staff accounts are created by administrators
         </p>
         <div className="flex items-center justify-center gap-2 text-white/30">
           <div className="h-px flex-1 bg-white/10"></div>
