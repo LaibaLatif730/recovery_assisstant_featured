@@ -22,10 +22,8 @@ export async function GET(req: Request) {
     if (doctorId) where.doctorId = doctorId
     if (clinicId) where.clinicId = clinicId
     if (date) {
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
+      const startOfDay = new Date(date + 'T00:00:00.000Z')
+      const endOfDay = new Date(date + 'T23:59:59.999Z')
       where.appointmentDate = { gte: startOfDay, lte: endOfDay }
     }
 

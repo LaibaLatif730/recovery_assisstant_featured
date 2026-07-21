@@ -153,9 +153,13 @@ export default function AppointmentsPage() {
     finally { setLoadingSlots(false) }
   }
 
-  const filteredAppointments = filter === 'ALL'
-    ? appointments
-    : appointments.filter(a => a.status === filter)
+  const filteredAppointments = appointments
+    .filter(a => filter === 'ALL' || a.status === filter)
+    .filter(a => {
+      if (!dateFilter) return true
+      const aptDate = new Date(a.appointmentDate).toISOString().slice(0, 10)
+      return aptDate === dateFilter
+    })
 
   const getStatusColor = (status: string) => {
     switch (status) {
