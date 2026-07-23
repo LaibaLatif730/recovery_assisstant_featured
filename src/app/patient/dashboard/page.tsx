@@ -136,6 +136,9 @@ export default function PatientDashboard() {
           </div>
           
           <div className="flex items-center gap-4">
+            <a href="/patient/appointments" className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-cyan-500/25 transition-all text-sm">
+              My Appointments
+            </a>
             <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-white/5 border border-white/10">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-white text-sm font-bold">
                 {patient.firstName[0]}{patient.lastName[0]}

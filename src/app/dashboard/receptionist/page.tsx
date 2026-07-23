@@ -7,6 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/utils'
 
+interface AppointmentRequest {
+  id: string
+  appointmentDate: string
+  type: string
+  duration: number
+  notes: string | null
+  patient: { id: string; firstName: string; lastName: string; email: string; phone: string }
+  doctor: { user: { name: string } } | null
+}
+
 interface ReceptionistData {
   todayAppointments: {
     id: string
@@ -41,7 +51,11 @@ interface ReceptionistData {
 
 export default function ReceptionistDashboardPage() {
   const [data, setData] = useState<ReceptionistData | null>(null)
+  const [requests, setRequests] = useState<AppointmentRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [processingId, setProcessingId] = useState<string | null>(null)
+  const [rejectModal, setRejectModal] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   useEffect(() => {
     fetch('/api/analytics')
@@ -49,7 +63,47 @@ export default function ReceptionistDashboardPage() {
       .then(d => { if (d && !d.error) setData(d) })
       .catch(() => {})
       .finally(() => setLoading(false))
+    fetch('/api/appointment-requests')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setRequests(d) })
+      .catch(() => {})
   }, [])
+
+  const handleApprove = async (id: string) => {
+    setProcessingId(id)
+    try {
+      const res = await fetch(`/api/appointment-requests/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      })
+      if (res.ok) {
+        setRequests(prev => prev.filter(r => r.id !== id))
+      }
+    } catch {
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
+  const handleReject = async (id: string) => {
+    setProcessingId(id)
+    try {
+      const res = await fetch(`/api/appointment-requests/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', rejectionReason: rejectReason || 'Rejected by receptionist' }),
+      })
+      if (res.ok) {
+        setRequests(prev => prev.filter(r => r.id !== id))
+        setRejectModal(null)
+        setRejectReason('')
+      }
+    } catch {
+    } finally {
+      setProcessingId(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -110,6 +164,86 @@ export default function ReceptionistDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {requests.length > 0 && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardHeader className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-yellow-500 animate-pulse" />
+              <CardTitle className="text-sm">Pending Appointment Requests ({requests.length})</CardTitle>
+            </div>
+            <Badge variant="outline" className="text-yellow-400 border-yellow-500/30">Action Needed</Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {requests.map((req) => (
+                <div key={req.id} className="flex items-center justify-between p-4 border border-white/10 rounded-lg bg-white/5">
+                  <div className="flex-1">
+                    <p className="font-medium text-white">{req.patient.firstName} {req.patient.lastName}</p>
+                    <p className="text-sm text-white/60">
+                      {new Date(req.appointmentDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {' · '}{req.type.replace(/_/g, ' ')} · {req.duration} min
+                    </p>
+                    {req.patient.email && (
+                      <p className="text-xs text-white/40 mt-1">{req.patient.email} · {req.patient.phone}</p>
+                    )}
+                    {req.notes && (
+                      <p className="text-xs text-white/40 mt-1 italic">"{req.notes}"</p>
+                    )}
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => handleApprove(req.id)}
+                      disabled={processingId === req.id}
+                      className="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      {processingId === req.id ? '...' : 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => setRejectModal(req.id)}
+                      disabled={processingId === req.id}
+                      className="px-4 py-2 rounded-lg bg-red-600/20 text-red-300 text-sm font-medium hover:bg-red-600/30 transition-colors border border-red-500/30 disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-strong rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-white mb-2">Reject Appointment Request</h3>
+            <p className="text-white/60 text-sm mb-4">Provide a reason (optional):</p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g., Doctor unavailable at requested time..."
+              rows={3}
+              className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 mb-4"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setRejectModal(null); setRejectReason('') }}
+                className="px-4 py-2 rounded-xl bg-white/10 text-white/80 hover:bg-white/20 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleReject(rejectModal)}
+                disabled={processingId === rejectModal}
+                className="px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
+              >
+                {processingId === rejectModal ? 'Rejecting...' : 'Confirm Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

@@ -469,23 +469,25 @@ model DoctorNote {
 // ─── Appointments ─────────────────────────────────────────────
 
 model Appointment {
-  id              String   @id @default(cuid())
-  patientId       String
-  patient         Patient  @relation(fields: [patientId], references: [id])
-  doctorId        String?
-  doctor          Doctor?  @relation(fields: [doctorId], references: [id])
-  userId          String?
-  user            User?    @relation("AppointmentUser", fields: [userId], references: [id])
-  clinicId        String?
-  appointmentDate DateTime
-  duration        Int      @default(30)
-  type            String   @default("CONSULTATION")
-  status          String   @default("SCHEDULED")
-  notes           String?
-  reminderSent    Boolean  @default(false)
-  priorityFlag    String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  patientId           String
+  patient             Patient  @relation(fields: [patientId], references: [id])
+  doctorId            String?
+  doctor              Doctor?  @relation(fields: [doctorId], references: [id])
+  userId              String?
+  user                User?    @relation("AppointmentUser", fields: [userId], references: [id])
+  clinicId            String?
+  appointmentDate     DateTime
+  duration            Int      @default(30)
+  type                String   @default("CONSULTATION")
+  status              String   @default("SCHEDULED")
+  notes               String?
+  requestedByPatient  Boolean  @default(false)
+  rejectionReason     String?
+  reminderSent        Boolean  @default(false)
+  priorityFlag        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([patientId])
   @@index([appointmentDate])

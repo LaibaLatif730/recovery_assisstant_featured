@@ -10,14 +10,19 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (session.user.role === 'PATIENT') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
+    // Always fetch the role from the database to ensure accuracy
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { id: true, name: true, email: true, role: true },
     })
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    if (user.role === 'PATIENT') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     return NextResponse.json(user)
   } catch (error) {

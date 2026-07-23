@@ -82,8 +82,15 @@ export async function proxy(req: NextRequest) {
     const role = await getUserRole(req)
 
     // Patients must NEVER access the staff dashboard
-    if (!role || role === 'PATIENT') {
+    if (role === 'PATIENT') {
       return NextResponse.redirect(new URL('/patient/login', req.url))
+    }
+
+    // If role is null/undefined, the JWT is invalid or missing role — redirect to staff login
+    if (!role) {
+      const loginUrl = new URL('/login', req.url)
+      loginUrl.searchParams.set('callbackUrl', pathname)
+      return NextResponse.redirect(loginUrl)
     }
 
     // Admin cannot access staff-only paths

@@ -55,6 +55,16 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role
         token.id = user.id
       }
+      // Ensure role is always present — fetch from DB if token was created without it
+      if (!token.role && token.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email as string },
+          select: { role: true },
+        })
+        if (dbUser) {
+          token.role = dbUser.role
+        }
+      }
       return token
     },
     async session({ session, token }) {
