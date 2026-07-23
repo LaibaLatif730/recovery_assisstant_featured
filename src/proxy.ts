@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { getToken } from 'next-auth/jwt'
 import { jwtVerify } from 'jose'
 
 const PATIENT_SECRET = new TextEncoder().encode(
   process.env.PATIENT_SESSION_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-patient-session-secret-change-in-production'
-)
-
-const NEXTAUTH_SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || 'fallback-nextauth-secret'
 )
 
 // Admin CANNOT access these — Doctor/Receptionist only
@@ -47,50 +44,28 @@ async function hasValidPatientSession(req: NextRequest): Promise<boolean> {
   }
 }
 
-async function getUserRole(req: NextRequest): Promise<string | null> {
-  const sessionToken =
-    req.cookies.get('next-auth.session-token')?.value ||
-    req.cookies.get('__Secure-next-auth.session-token')?.value
-
-  if (!sessionToken) return null
-
-  try {
-    const { payload } = await jwtVerify(sessionToken, NEXTAUTH_SECRET, {
-      algorithms: ['HS256'],
-    })
-    return (payload.role as string) || null
-  } catch {
-    return null
-  }
-}
-
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // ── Protect /dashboard routes ──────────────────────────────────────
   if (pathname.startsWith('/dashboard')) {
-    const sessionToken =
-      req.cookies.get('next-auth.session-token')?.value ||
-      req.cookies.get('__Secure-next-auth.session-token')?.value
+    // Use NextAuth's getToken — works correctly with NextAuth JWT format
+    const token = await getToken({
+      req,
+      secret: process.env.NEXTAUTH_SECRET || 'fallback-nextauth-secret',
+    })
 
-    if (!sessionToken) {
+    if (!token) {
       const loginUrl = new URL('/login', req.url)
       loginUrl.searchParams.set('callbackUrl', pathname)
       return NextResponse.redirect(loginUrl)
     }
 
-    const role = await getUserRole(req)
+    const role = token.role as string | undefined
 
     // Patients must NEVER access the staff dashboard
-    if (role === 'PATIENT') {
+    if (!role || role === 'PATIENT') {
       return NextResponse.redirect(new URL('/patient/login', req.url))
-    }
-
-    // If role is null/undefined, the JWT is invalid or missing role — redirect to staff login
-    if (!role) {
-      const loginUrl = new URL('/login', req.url)
-      loginUrl.searchParams.set('callbackUrl', pathname)
-      return NextResponse.redirect(loginUrl)
     }
 
     // Admin cannot access staff-only paths
