@@ -39,9 +39,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 })
     }
 
+    // First try: Patient record with a passwordHash (WhatsApp/PIN-set patients)
     const patient = await prisma.patient.findFirst({
       where: { isActive: true, email: normalizedEmail },
-      select: { id: true, firstName: true, lastName: true, email: true, passwordHash: true },
+      select: { id: true, firstName: true, lastName: true, email: true, passwordHash: true, userId: true },
     })
 
     if (patient && patient.passwordHash) {
@@ -54,6 +55,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ name: `${patient.firstName} ${patient.lastName}` })
     }
 
+    // Second try: User table (patients registered via the signup form)
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
       select: { id: true, name: true, email: true, password: true, role: true },
@@ -68,23 +70,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
+    // Ensure a Patient record exists and is linked to the User
     let patientRecord = await prisma.patient.findFirst({
-      where: { email: normalizedEmail },
+      where: { userId: user.id },
       select: { id: true },
     })
 
     if (!patientRecord) {
-      const nameParts = user.name?.trim().split(/\s+/) || ['Patient']
-      patientRecord = await prisma.patient.create({
-        data: {
-          firstName: nameParts[0],
-          lastName: nameParts.slice(1).join(' ') || nameParts[0],
-          email: user.email,
-          isActive: true,
-          consentGiven: true,
-          consentDate: new Date(),
-        },
+      // Also check by email in case the record exists but userId isn't linked yet
+      patientRecord = await prisma.patient.findFirst({
+        where: { email: normalizedEmail },
+        select: { id: true },
       })
+
+      if (patientRecord) {
+        // Link the existing Patient record to the User
+        await prisma.patient.update({
+          where: { id: patientRecord.id },
+          data: { userId: user.id },
+        })
+      } else {
+        // Create a new Patient record linked to the User
+        const nameParts = user.name?.trim().split(/\s+/) || ['Patient']
+        patientRecord = await prisma.patient.create({
+          data: {
+            userId: user.id,
+            firstName: nameParts[0],
+            lastName: nameParts.slice(1).join(' ') || nameParts[0],
+            email: user.email,
+            isActive: true,
+            consentGiven: true,
+            consentDate: new Date(),
+          },
+        })
+      }
     }
 
     attempts.delete(normalizedEmail)

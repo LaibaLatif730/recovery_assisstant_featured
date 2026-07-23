@@ -16,11 +16,11 @@ const STAFF_ONLY_PATHS = [
   '/dashboard/treatments/new',
   '/dashboard/appointments/new',
   '/dashboard/clinical-notes/new',
-  '/dashboard/checkins', // Doctor reviews check-ins
+  '/dashboard/checkins',
   '/dashboard/before-after',
 ]
 
-// Admin ONLY paths — Doctor/Receptionist CANNOT access
+// Admin ONLY paths — Doctor/Receptionist/Patient CANNOT access
 const ADMIN_ONLY_PATHS = [
   '/dashboard/doctors',
   '/dashboard/analytics',
@@ -48,8 +48,9 @@ async function hasValidPatientSession(req: NextRequest): Promise<boolean> {
 }
 
 async function getUserRole(req: NextRequest): Promise<string | null> {
-  const sessionToken = req.cookies.get('next-auth.session-token')?.value
-    || req.cookies.get('__Secure-next-auth.session-token')?.value
+  const sessionToken =
+    req.cookies.get('next-auth.session-token')?.value ||
+    req.cookies.get('__Secure-next-auth.session-token')?.value
 
   if (!sessionToken) return null
 
@@ -66,9 +67,11 @@ async function getUserRole(req: NextRequest): Promise<string | null> {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
+  // ── Protect /dashboard routes ──────────────────────────────────────
   if (pathname.startsWith('/dashboard')) {
-    const sessionToken = req.cookies.get('next-auth.session-token')?.value
-      || req.cookies.get('__Secure-next-auth.session-token')?.value
+    const sessionToken =
+      req.cookies.get('next-auth.session-token')?.value ||
+      req.cookies.get('__Secure-next-auth.session-token')?.value
 
     if (!sessionToken) {
       const loginUrl = new URL('/login', req.url)
@@ -78,40 +81,54 @@ export async function proxy(req: NextRequest) {
 
     const role = await getUserRole(req)
 
-    if (role === 'PATIENT') {
-      return NextResponse.redirect(new URL('/login', req.url))
+    // Patients must NEVER access the staff dashboard
+    if (!role || role === 'PATIENT') {
+      return NextResponse.redirect(new URL('/patient/login', req.url))
     }
 
+    // Admin cannot access staff-only paths
     if (role === 'ADMIN') {
-      const isStaffPath = STAFF_ONLY_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+      const isStaffPath = STAFF_ONLY_PATHS.some(
+        p => pathname === p || pathname.startsWith(p + '/')
+      )
       if (isStaffPath) {
         return NextResponse.redirect(new URL('/dashboard', req.url))
       }
     }
 
+    // Receptionist cannot access admin or doctor paths
     if (role === 'RECEPTIONIST') {
-      const isAdminPath = ADMIN_ONLY_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
-      const isDoctorPath = DOCTOR_ONLY_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
-      if (isAdminPath || isDoctorPath) {
+      const blocked =
+        ADMIN_ONLY_PATHS.some(p => pathname === p || pathname.startsWith(p + '/')) ||
+        DOCTOR_ONLY_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+      if (blocked) {
         return NextResponse.redirect(new URL('/dashboard', req.url))
       }
     }
 
+    // Doctor cannot access admin paths
     if (role === 'DOCTOR') {
-      const isAdminPath = ADMIN_ONLY_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+      const isAdminPath = ADMIN_ONLY_PATHS.some(
+        p => pathname === p || pathname.startsWith(p + '/')
+      )
       if (isAdminPath) {
         return NextResponse.redirect(new URL('/dashboard', req.url))
       }
     }
   }
 
+  // ── Protect /patient routes ────────────────────────────────────────
   if (pathname.startsWith('/patient') && !pathname.startsWith('/patient/login')) {
     if (!(await hasValidPatientSession(req))) {
       return NextResponse.redirect(new URL('/patient/login', req.url))
     }
   }
 
-  if (pathname.startsWith('/api/patient/') && !pathname.startsWith('/api/patient/auth')) {
+  // ── Protect /api/patient routes ───────────────────────────────────
+  if (
+    pathname.startsWith('/api/patient/') &&
+    !pathname.startsWith('/api/patient/auth')
+  ) {
     if (!(await hasValidPatientSession(req))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
