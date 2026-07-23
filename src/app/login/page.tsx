@@ -38,15 +38,13 @@ function LoginForm() {
         email,
         password,
         redirect: false,
-        callbackUrl: destination,
       })
 
       if (result?.error) {
         setError('Invalid email or password')
         setLoading(false)
       } else {
-        // Always navigate to the explicit destination (not result.url which may be the callback URL)
-        window.location.href = destination
+        router.push(destination)
       }
     } catch {
       setError('An error occurred. Please try again.')
