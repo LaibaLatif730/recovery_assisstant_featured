@@ -24,6 +24,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials')
         }
 
+        if (user.role === 'PATIENT') {
+          throw new Error('Invalid credentials')
+        }
+
         const isCorrectPassword = await bcrypt.compare(
           credentials.password,
           user.password

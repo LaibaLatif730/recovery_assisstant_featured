@@ -63,10 +63,10 @@ export default function DashboardLayout({
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
-  const [userRole, setUserRole] = useState('ADMIN')
+  const [userRole, setUserRole] = useState('')
   const [userName, setUserName] = useState('User')
 
-  const navigation = userRole === 'DOCTOR' ? doctorNav : userRole === 'RECEPTIONIST' ? receptionistNav : adminNav
+  const navigation = userRole === 'DOCTOR' ? doctorNav : userRole === 'RECEPTIONIST' ? receptionistNav : userRole === 'ADMIN' ? adminNav : []
 
   useEffect(() => {
     fetchUser()
@@ -85,8 +85,14 @@ export default function DashboardLayout({
       const res = await fetch('/api/auth/me')
       if (res.ok) {
         const data = await res.json()
-        setUserRole(data.role || 'ADMIN')
+        if (data.role === 'PATIENT') {
+          router.replace('/patient/login')
+          return
+        }
+        setUserRole(data.role || '')
         setUserName(data.name || 'User')
+      } else {
+        router.replace('/login')
       }
     } catch {
     }

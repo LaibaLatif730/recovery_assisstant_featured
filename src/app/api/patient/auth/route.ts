@@ -44,22 +44,53 @@ export async function POST(req: Request) {
       select: { id: true, firstName: true, lastName: true, email: true, passwordHash: true },
     })
 
-    if (!patient || !patient.passwordHash) {
+    if (patient && patient.passwordHash) {
+      const valid = await bcrypt.compare(password, patient.passwordHash)
+      if (!valid) {
+        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+      }
+      attempts.delete(normalizedEmail)
+      await setPatientSessionCookie(patient.id)
+      return NextResponse.json({ name: `${patient.firstName} ${patient.lastName}` })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, name: true, email: true, password: true, role: true },
+    })
+
+    if (!user || user.role !== 'PATIENT' || !user.password) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    const valid = await bcrypt.compare(password, patient.passwordHash)
+    const valid = await bcrypt.compare(password, user.password)
     if (!valid) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    attempts.delete(normalizedEmail)
-
-    await setPatientSessionCookie(patient.id)
-
-    return NextResponse.json({
-      name: `${patient.firstName} ${patient.lastName}`,
+    let patientRecord = await prisma.patient.findFirst({
+      where: { email: normalizedEmail },
+      select: { id: true },
     })
+
+    if (!patientRecord) {
+      const nameParts = user.name?.trim().split(/\s+/) || ['Patient']
+      patientRecord = await prisma.patient.create({
+        data: {
+          firstName: nameParts[0],
+          lastName: nameParts.slice(1).join(' ') || nameParts[0],
+          email: user.email,
+          isActive: true,
+          consentGiven: true,
+          consentDate: new Date(),
+        },
+      })
+    }
+
+    attempts.delete(normalizedEmail)
+    await setPatientSessionCookie(patientRecord.id)
+
+    return NextResponse.json({ name: user.name })
   } catch (error) {
     console.error('Patient auth error:', error)
     return NextResponse.json({ error: 'Authentication failed' }, { status: 500 })

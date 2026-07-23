@@ -58,7 +58,7 @@ export default function SignupPage() {
         return
       }
 
-      router.push('/login?registered=true')
+      router.push('/patient/login?registered=true')
     } catch {
       setError('An error occurred. Please try again.')
     } finally {
@@ -224,7 +224,7 @@ export default function SignupPage() {
         <div className="mt-6 text-center">
           <p className="text-sm text-white/50">
             Already have an account?{' '}
-            <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+            <Link href="/patient/login" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
               Sign in
             </Link>
           </p>

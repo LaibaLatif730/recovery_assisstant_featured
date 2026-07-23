@@ -78,6 +78,10 @@ export async function proxy(req: NextRequest) {
 
     const role = await getUserRole(req)
 
+    if (role === 'PATIENT') {
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+
     if (role === 'ADMIN') {
       const isStaffPath = STAFF_ONLY_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
       if (isStaffPath) {
