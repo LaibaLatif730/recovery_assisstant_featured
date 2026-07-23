@@ -54,18 +54,7 @@ function LoginForm() {
     }
   }
 
-  const fillDemo = (role: 'admin' | 'doctor' | 'receptionist') => {
-    if (role === 'admin') {
-      setEmail('admin@clinic.com')
-      setPassword('admin123')
-    } else if (role === 'doctor') {
-      setEmail('doctor@clinic.com')
-      setPassword('doctor123')
-    } else {
-      setEmail('receptionist@clinic.com')
-      setPassword('patient123')
-    }
-  }
+
 
   return (
     <div className="glass-strong w-full max-w-md p-8 animate-fade-in">
@@ -167,20 +156,7 @@ function LoginForm() {
         </Button>
       </form>
 
-      <div className="mt-6 grid grid-cols-3 gap-3">
-        <button type="button" onClick={() => fillDemo('admin')} className="p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 text-center group">
-          <div className="text-sm font-medium text-white group-hover:text-white/90">Admin Demo</div>
-          <div className="text-xs text-white/40 mt-1">admin@clinic.com</div>
-        </button>
-        <button type="button" onClick={() => fillDemo('doctor')} className="p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 text-center group">
-          <div className="text-sm font-medium text-white group-hover:text-white/90">Doctor Demo</div>
-          <div className="text-xs text-white/40 mt-1">doctor@clinic.com</div>
-        </button>
-        <button type="button" onClick={() => fillDemo('receptionist')} className="p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 text-center group">
-          <div className="text-sm font-medium text-white group-hover:text-white/90">Receptionist Demo</div>
-          <div className="text-xs text-white/40 mt-1">receptionist@clinic.com</div>
-        </button>
-      </div>
+
 
       <div className="mt-6 text-center space-y-3">
         <p className="text-sm text-white/50">
