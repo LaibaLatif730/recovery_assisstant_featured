@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FieldError } from '@/components/FieldError'
 
-export default function PatientLoginPage() {
+function PatientLoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const registered = searchParams.get('registered')
@@ -173,5 +173,13 @@ export default function PatientLoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PatientLoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-2 border-white/20 border-t-white rounded-full" /></div>}>
+      <PatientLoginForm />
+    </Suspense>
   )
 }
