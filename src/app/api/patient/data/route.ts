@@ -24,6 +24,17 @@ export async function GET() {
           },
           orderBy: { treatmentDate: 'desc' },
         },
+        checkIns: {
+          where: { treatmentId: null },
+          include: {
+            photos: {
+              include: { aiAnalyses: true },
+              orderBy: { uploadDate: 'desc' },
+            },
+            aiAnalyses: true,
+          },
+          orderBy: { scheduledDate: 'asc' },
+        },
       },
     })
 
@@ -37,6 +48,7 @@ export async function GET() {
       lastName: patient.lastName,
       dateOfBirth: patient.dateOfBirth,
       treatments: patient.treatments,
+      standaloneCheckIns: patient.checkIns,
     }
 
     return NextResponse.json(safeData)

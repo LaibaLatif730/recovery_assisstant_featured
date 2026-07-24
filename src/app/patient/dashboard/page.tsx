@@ -32,6 +32,7 @@ interface PatientData {
   lastName: string
   phone: string
   treatments: Treatment[]
+  standaloneCheckIns: CheckIn[]
 }
 
 export default function PatientDashboard() {
@@ -78,6 +79,9 @@ export default function PatientDashboard() {
         allCheckIns.push({ ...ci, treatmentType: t.type })
       })
     })
+    patient.standaloneCheckIns?.forEach((ci) => {
+      allCheckIns.push({ ...ci, treatmentType: 'General' })
+    })
      
     return allCheckIns
       .filter((ci) => ci.status === 'PENDING' || ci.status === 'SENT')
@@ -91,6 +95,9 @@ export default function PatientDashboard() {
       t.checkIns.forEach((ci) => {
         allCheckIns.push({ ...ci, treatmentType: t.type })
       })
+    })
+    patient.standaloneCheckIns?.forEach((ci) => {
+      allCheckIns.push({ ...ci, treatmentType: 'General' })
     })
     return allCheckIns.filter((ci) => ci.status === 'COMPLETED')
   }
