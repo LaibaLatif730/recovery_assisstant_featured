@@ -16,7 +16,7 @@ interface Props {
   treatmentTypeDistribution: { type: string; count: number }[]
 }
 
-export default function Charts({ riskDistribution, complicationStats, weeklyTrend, treatmentTypeDistribution }: Props) {
+export default function Charts({ riskDistribution = [], complicationStats = [], weeklyTrend = [], treatmentTypeDistribution = [] }: Props) {
   return (
     <>
       <div className="grid gap-6 md:grid-cols-2">

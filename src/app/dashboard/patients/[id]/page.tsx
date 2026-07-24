@@ -66,7 +66,7 @@ export default function PatientDetailPage() {
   })
   const [userRole, setUserRole] = useState('')
   const [showCheckinForm, setShowCheckinForm] = useState(false)
-  const [checkinForm, setCheckinForm] = useState({ numberOfCheckIns: '5', intervalDays: '1', startDate: '', notes: '' })
+  const [checkinForm, setCheckinForm] = useState({ treatmentId: '', numberOfCheckIns: '5', intervalDays: '1', startDate: '', notes: '' })
   const [creatingCheckins, setCreatingCheckins] = useState(false)
   const [patientSummary, setPatientSummary] = useState('')
   const [loadingSummary, setLoadingSummary] = useState(false)
@@ -110,6 +110,7 @@ export default function PatientDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           patientId: params.id,
+          treatmentId: checkinForm.treatmentId || undefined,
           numberOfCheckIns: parseInt(checkinForm.numberOfCheckIns),
           intervalDays: parseInt(checkinForm.intervalDays),
           startDate: checkinForm.startDate || undefined,
@@ -118,7 +119,7 @@ export default function PatientDetailPage() {
       })
       if (res.ok) {
         setShowCheckinForm(false)
-        setCheckinForm({ numberOfCheckIns: '5', intervalDays: '1', startDate: '', notes: '' })
+        setCheckinForm({ treatmentId: '', numberOfCheckIns: '5', intervalDays: '1', startDate: '', notes: '' })
         fetchPatient()
       }
     } catch (error) {
@@ -502,6 +503,21 @@ export default function PatientDetailPage() {
             {showCheckinForm && (
               <form onSubmit={handleCreateCheckins} className="mb-6 p-4 border rounded-lg space-y-4 bg-muted/50">
                 <p className="text-sm font-medium">Create check-ins for this patient</p>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Link to Treatment (optional)</label>
+                  <select
+                    className="w-full p-2 rounded-md bg-white/5 border border-white/10 text-white"
+                    value={checkinForm.treatmentId}
+                    onChange={(e) => setCheckinForm({ ...checkinForm, treatmentId: e.target.value })}
+                  >
+                    <option value="">No treatment (standalone check-ins)</option>
+                    {patient!.treatments.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.type.replace(/_/g, ' ')} — {formatDate(t.treatmentDate)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground">Number of check-ins</label>

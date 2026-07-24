@@ -30,6 +30,7 @@ async function adminAnalytics() {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const eightWeeksAgo = new Date(now.getTime() - 56 * 24 * 60 * 60 * 1000)
 
   const [
     totalDoctors,
@@ -42,6 +43,13 @@ async function adminAnalytics() {
     recentAppointments,
     complications,
     auditLogs,
+    completedCheckIns,
+    pendingCheckIns,
+    escalatedCheckIns,
+    riskRows,
+    treatmentTypeRows,
+    complicationTypeRows,
+    weeklyCheckIns,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'DOCTOR' } }),
     prisma.user.count({ where: { role: 'RECEPTIONIST' } }),
@@ -64,7 +72,47 @@ async function adminAnalytics() {
         user: { select: { name: true, role: true } },
       },
     }),
+    prisma.recoveryCheckIn.count({ where: { status: 'COMPLETED' } }),
+    prisma.recoveryCheckIn.count({ where: { status: 'PENDING' } }),
+    prisma.recoveryCheckIn.count({ where: { status: 'ESCALATED' } }),
+    prisma.recoveryCheckIn.groupBy({
+      by: ['riskLevel'],
+      _count: { id: true },
+    }),
+    prisma.treatment.groupBy({
+      by: ['type'],
+      _count: { id: true },
+    }),
+    prisma.complicationRecord.groupBy({
+      by: ['complicationType'],
+      _count: { id: true },
+    }),
+    prisma.recoveryCheckIn.findMany({
+      where: { createdAt: { gte: eightWeeksAgo } },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
   ])
+
+  const riskDistribution = riskRows.map(r => ({ level: r.riskLevel, count: r._count.id }))
+  const treatmentTypeDistribution = treatmentTypeRows.map(r => ({ type: r.type, count: r._count.id }))
+  const complicationStats = complicationTypeRows.map(r => ({ type: r.complicationType, count: r._count.id }))
+
+  const weekMap = new Map<string, number>()
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * 7 * 24 * 60 * 60 * 1000)
+    const label = d.toISOString().split('T')[0]
+    weekMap.set(label, 0)
+  }
+  for (const row of weeklyCheckIns) {
+    const d = row.createdAt
+    const weekStart = new Date(d.getTime() - d.getDay() * 24 * 60 * 60 * 1000)
+    const label = weekStart.toISOString().split('T')[0]
+    if (weekMap.has(label)) {
+      weekMap.set(label, (weekMap.get(label) || 0) + 1)
+    }
+  }
+  const weeklyTrend = Array.from(weekMap.entries()).map(([date, count]) => ({ date, count }))
 
   return NextResponse.json({
     totalDoctors,
@@ -77,6 +125,13 @@ async function adminAnalytics() {
     recentAppointments,
     unreportedComplications: complications,
     staffActivity: auditLogs,
+    completedCheckIns,
+    pendingCheckIns,
+    escalatedCheckIns,
+    riskDistribution,
+    treatmentTypeDistribution,
+    complicationStats,
+    weeklyTrend,
   })
 }
 
