@@ -11,7 +11,7 @@ export async function GET() {
     }
 
     const receptionists = await prisma.user.findMany({
-      where: { role: 'RECEPTIONIST' },
+      where: { role: { in: ['RECEPTIONIST', 'INACTIVE'] } },
       select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     })

@@ -24,7 +24,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials')
         }
 
-        if (user.role === 'PATIENT') {
+        if (user.role === 'PATIENT' || user.role === 'INACTIVE') {
           throw new Error('Invalid credentials')
         }
 
@@ -55,8 +55,8 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role
         token.id = user.id
       }
-      // Ensure role is always present — fetch from DB if token was created without it
-      if (!token.role && token.email) {
+      // Always verify role from DB to catch stale tokens (e.g. role changed since token was issued)
+      if (token.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: token.email as string },
           select: { role: true },

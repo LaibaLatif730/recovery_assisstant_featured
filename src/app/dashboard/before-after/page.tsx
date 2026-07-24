@@ -61,7 +61,7 @@ export default function BeforeAfterPage() {
       const res = await fetch('/api/patients')
       const data = await res.json()
       if (Array.isArray(data)) {
-        setPatients(data.filter((p: Patient) => p.treatments?.length > 0))
+        setPatients(data)
       }
     } catch (error) {
       console.error('Error fetching patients:', error)
