@@ -35,7 +35,7 @@ export default function NewPatientPage() {
     fetch('/api/auth/me')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d?.role === 'ADMIN' || d?.role === 'DOCTOR' || d?.role === 'RECEPTIONIST') {
+        if (d?.role === 'DOCTOR' || d?.role === 'RECEPTIONIST') {
           setAuthorized(true)
         } else {
           router.replace('/dashboard/patients')

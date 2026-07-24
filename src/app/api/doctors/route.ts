@@ -112,6 +112,10 @@ export async function PATCH(req: Request) {
     if (email !== undefined) userUpdate.email = email
     if (phone !== undefined) userUpdate.phone = phone || null
 
+    if (isActive !== undefined) {
+      userUpdate.role = isActive ? 'DOCTOR' : 'INACTIVE'
+    }
+
     if (Object.keys(userUpdate).length > 0) {
       await prisma.user.update({ where: { id: doctor.userId }, data: userUpdate })
     }
@@ -124,7 +128,7 @@ export async function PATCH(req: Request) {
         licenseNo: licenseNo !== undefined ? licenseNo || null : undefined,
       },
       include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
+        user: { select: { id: true, name: true, email: true, phone: true, role: true } },
       },
     })
 

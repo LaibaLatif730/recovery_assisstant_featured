@@ -128,11 +128,15 @@ export async function DELETE(req: Request) {
     }
 
     const existing = await prisma.user.findUnique({ where: { id } })
-    if (!existing || existing.role !== 'RECEPTIONIST') {
+    if (!existing) {
       return NextResponse.json({ error: 'Receptionist not found' }, { status: 404 })
     }
 
-    await prisma.user.update({ where: { id }, data: { role: 'INACTIVE' } })
+    if (existing.role !== 'RECEPTIONIST' && existing.role !== 'INACTIVE') {
+      return NextResponse.json({ error: 'Receptionist not found' }, { status: 404 })
+    }
+
+    await prisma.user.delete({ where: { id } })
 
     return NextResponse.json({ success: true })
   } catch (error) {

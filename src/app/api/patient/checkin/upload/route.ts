@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/db'
-import { put } from '@vercel/blob'
+import { writeFile } from 'fs/promises'
+import { join } from 'path'
 import { analyzeWithGrok, compareWithPreviousAnalysis } from '@/lib/grok'
 import { resizeImage } from '@/lib/image-utils'
 import { requirePatientAuth } from '@/lib/patient-auth'
@@ -37,11 +38,20 @@ export async function POST(req: Request) {
     let buffer = Buffer.from(bytes)
 
     const filename = `${Date.now()}-${file.name}`
-    const blob = await put(`uploads/${filename}`, buffer, {
-      access: 'public',
-      contentType: file.type,
-    })
-    const imageUrl = blob.url
+    let imageUrl: string
+
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const { put } = await import('@vercel/blob')
+      const blob = await put(`uploads/${filename}`, buffer, {
+        access: 'public',
+        contentType: file.type,
+      })
+      imageUrl = blob.url
+    } else {
+      const uploadDir = join(process.cwd(), 'public', 'uploads')
+      await writeFile(join(uploadDir, filename), buffer)
+      imageUrl = `/uploads/${filename}`
+    }
 
     const base64Image = await resizeImage(buffer, file.type)
 

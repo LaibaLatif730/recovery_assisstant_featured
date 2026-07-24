@@ -3,7 +3,6 @@ import prisma from '@/lib/db'
 import { parseWhatsAppWebhook, sendWhatsAppMessage, verifyWhatsAppSignature } from '@/lib/whatsapp'
 import { analyzeWithGrok, compareWithPreviousAnalysis } from '@/lib/grok'
 import { resizeImage } from '@/lib/image-utils'
-import { put } from '@vercel/blob'
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -226,10 +225,22 @@ export async function POST(req: Request) {
         }
 
         const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
-        const blob = await put(`whatsapp/${Date.now()}-whatsapp.jpg`, imageBuffer, {
-          access: 'public',
-          contentType: 'image/jpeg',
-        })
+        let imageUrl: string
+
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          const { put } = await import('@vercel/blob')
+          const blob = await put(`whatsapp/${Date.now()}-whatsapp.jpg`, imageBuffer, {
+            access: 'public',
+            contentType: 'image/jpeg',
+          })
+          imageUrl = blob.url
+        } else {
+          const { writeFile } = await import('fs/promises')
+          const { join } = await import('path')
+          const filename = `${Date.now()}-whatsapp.jpg`
+          await writeFile(join(process.cwd(), 'public', 'uploads', filename), imageBuffer)
+          imageUrl = `/uploads/${filename}`
+        }
 
         const base64Image = await resizeImage(imageBuffer, 'image/jpeg')
 
@@ -270,7 +281,7 @@ export async function POST(req: Request) {
             data: {
               patientId: patient.id,
               checkInId: pendingCheckIn.id,
-              imageUrl: blob.url,
+              imageUrl: imageUrl,
               source: 'WHATSAPP',
               whatsappMessageId,
               metadata: JSON.stringify({
