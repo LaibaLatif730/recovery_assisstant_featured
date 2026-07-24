@@ -47,6 +47,8 @@ export async function POST(req: Request) {
         contentType: file.type,
       })
       imageUrl = blob.url
+    } else if (process.env.VERCEL) {
+      return NextResponse.json({ error: 'Photo storage not configured. Set BLOB_READ_WRITE_TOKEN in Vercel environment variables.' }, { status: 500 })
     } else {
       const uploadDir = join(process.cwd(), 'public', 'uploads')
       await writeFile(join(uploadDir, filename), buffer)
@@ -196,6 +198,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     console.error('Error uploading photo:', error)
-    return NextResponse.json({ error: 'Photo upload failed' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Photo upload failed'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

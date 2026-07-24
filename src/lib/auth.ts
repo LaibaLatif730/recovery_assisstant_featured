@@ -54,15 +54,18 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = (user as any).role
         token.id = user.id
+        token.roleCheckedAt = Date.now()
       }
-      // Always verify role from DB to catch stale tokens (e.g. role changed since token was issued)
-      if (token.email) {
+      // Re-verify role from DB every 5 minutes to catch stale tokens
+      const lastChecked = (token.roleCheckedAt as number) || 0
+      if (token.email && Date.now() - lastChecked > 5 * 60 * 1000) {
         const dbUser = await prisma.user.findUnique({
           where: { email: token.email as string },
           select: { role: true },
         })
         if (dbUser) {
           token.role = dbUser.role
+          token.roleCheckedAt = Date.now()
         }
       }
       return token

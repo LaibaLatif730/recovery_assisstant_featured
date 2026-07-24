@@ -234,6 +234,9 @@ export async function POST(req: Request) {
             contentType: 'image/jpeg',
           })
           imageUrl = blob.url
+        } else if (process.env.VERCEL) {
+          console.error('Photo storage not configured on Vercel. Set BLOB_READ_WRITE_TOKEN.')
+          continue
         } else {
           const { writeFile } = await import('fs/promises')
           const { join } = await import('path')
