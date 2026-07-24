@@ -68,6 +68,13 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(new URL('/patient/login', req.url))
     }
 
+    // Inactive users are blocked from the dashboard
+    if (role === 'INACTIVE') {
+      const loginUrl = new URL('/login', req.url)
+      loginUrl.searchParams.set('error', 'account_inactive')
+      return NextResponse.redirect(loginUrl)
+    }
+
     // Admin cannot access staff-only paths
     if (role === 'ADMIN') {
       const isStaffPath = STAFF_ONLY_PATHS.some(
